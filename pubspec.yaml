@@ -1,0 +1,49 @@
+name: freeli_app
+description: Freeli - Team Collaboration App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.3.0
+  pinput: ^3.0.1
+  # State management
+  flutter_riverpod: ^2.5.1
+  # HTTP client (used directly for GraphQL POST — graphql_flutter removed due to AuthLink crash)
+  dio: ^5.4.3
+  # Secure token storage
+  flutter_secure_storage: ^9.2.2
+  # Navigation
+  go_router: ^13.2.5
+  # Device ID
+  device_info_plus: ^9.1.2
+  # UUID fallback for device ID
+  uuid: ^4.3.3
+  # Date formatting
+  intl: ^0.19.0
+  # Image caching
+  cached_network_image: ^3.3.1
+  # AES encryption (CryptoJS-compatible)
+  encrypt: ^5.0.3
+  crypto: ^3.0.3
+  # File handling
+  file_picker: ^8.1.2
+  path_provider: ^2.1.3
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
