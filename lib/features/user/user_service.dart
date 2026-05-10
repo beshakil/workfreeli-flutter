@@ -1,5 +1,6 @@
 import '../../core/network/graphql_client.dart';
 import 'user_models.dart';
+export 'user_models.dart' show CompanyUser;
 
 const _meQuery = '''
 query Me {
@@ -29,6 +30,18 @@ query Users(\$company_id: String!) {
 }
 ''';
 
+const _getCompanyUsersQuery = '''
+query CompanyUsers(\$company_id: String!) {
+  users(company_id: \$company_id) {
+    id
+    firstname
+    lastname
+    email
+    img
+  }
+}
+''';
+
 class UserService {
   UserService._();
 
@@ -54,5 +67,19 @@ class UserService {
       if (id.isNotEmpty) map[id] = name.isNotEmpty ? name : id;
     }
     return map;
+  }
+
+  /// Returns all company users with full profile data for user-selection UIs
+  /// (Direct Message user picker, Create Room member selection).
+  static Future<List<CompanyUser>> getCompanyUsers(String companyId) async {
+    final data = await GraphQLService.call(
+      _getCompanyUsersQuery,
+      variables: {'company_id': companyId},
+    );
+    final list = data['users'] as List<dynamic>? ?? [];
+    return list
+        .map((e) => CompanyUser.fromJson(e as Map<String, dynamic>))
+        .where((u) => u.id.isNotEmpty)
+        .toList();
   }
 }

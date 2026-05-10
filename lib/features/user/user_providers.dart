@@ -12,3 +12,10 @@ final usersMapProvider = FutureProvider<Map<String, String>>((ref) async {
   final me = await ref.watch(meProvider.future);
   return UserService.getUsersMap(me.companyId);
 });
+
+// Full user list with profile data for DM / Create Room user-selection UIs.
+// Not autoDispose — cached per session; the user roster rarely changes.
+final companyUsersProvider = FutureProvider<List<CompanyUser>>((ref) async {
+  final me = await ref.watch(meProvider.future);
+  return UserService.getCompanyUsers(me.companyId);
+});

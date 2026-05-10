@@ -2,6 +2,8 @@ import '../../core/encryption/encryption_service.dart';
 import '../../core/models/conversation_models.dart';
 import '../../core/network/graphql_client.dart';
 
+export '../../core/models/conversation_models.dart' show Room;
+
 const _getRoomsQuery = '''
 query Rooms(\$userId: String!) {
   rooms(user_id: \$userId) {
@@ -131,6 +133,29 @@ mutation ArchiveConversation(\$input: archiveConvInput!) {
 }
 ''';
 
+const _createRoomMutation = '''
+mutation CreateRoom(\$input: newRoomData!) {
+  create_room(input: \$input) {
+    status
+    message
+    data {
+      conversation_id
+      title
+      group
+      participants
+      company_id
+      friend_id
+      conv_img
+      close_for
+      archive
+      pin
+      has_mute
+      system_conversation
+    }
+  }
+}
+''';
+
 class ConversationsService {
   ConversationsService._();
 
@@ -193,6 +218,48 @@ class ConversationsService {
         'input': {'conversation_id': conversationId}
       },
     );
+  }
+
+  /// Creates a new room or direct message conversation.
+  ///
+  /// Pass `group: 'yes'` for a group room or `group: 'no'` for a direct
+  /// message. The backend deduplicates DMs — if one already exists between
+  /// the same two participants it returns the existing conversation.
+  static Future<Room> createRoom({
+    required String title,
+    required List<String> participants,
+    required String companyId,
+    String group = 'yes',
+    String? privacy,
+    String? selfId,
+  }) async {
+    final input = <String, dynamic>{
+      'title': title,
+      'participants': participants,
+      'company_id': companyId,
+      'group': group,
+      if (privacy != null) 'privacy': privacy,
+      if (group == 'yes' && selfId != null) 'participants_admin': [selfId],
+    };
+
+    final data = await GraphQLService.call(
+      _createRoomMutation,
+      variables: {'input': input},
+    );
+
+    final result = data['create_room'] as Map<String, dynamic>? ?? {};
+    final roomMap = result['data'] as Map<String, dynamic>? ?? {};
+
+    if (roomMap.isEmpty) {
+      final msg = result['message'] as String? ?? 'Failed to create room';
+      throw GqlException(msg);
+    }
+
+    final room = Room.fromJson(roomMap, selfId: selfId);
+    if (room.id.isEmpty) {
+      throw const GqlException('Room creation failed — no ID returned');
+    }
+    return room;
   }
 
   static Future<List<Room>> getRooms(String userId) async {
