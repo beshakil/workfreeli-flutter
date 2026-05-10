@@ -95,6 +95,42 @@ mutation ReadAll(\$input: readAllInput!) {
 }
 ''';
 
+// ── Conversation actions (pin, mute, close, archive) ──────────────────
+// These mutations follow the same input pattern as readAll.
+// Adjust field names if your backend schema differs.
+
+const _togglePinMutation = '''
+mutation TogglePin(\$input: togglePinInput!) {
+  toggle_pin(input: \$input) {
+    status
+  }
+}
+''';
+
+const _toggleMuteMutation = '''
+mutation ToggleMute(\$input: toggleMuteInput!) {
+  toggle_mute(input: \$input) {
+    status
+  }
+}
+''';
+
+const _toggleCloseMutation = '''
+mutation ToggleClose(\$input: toggleCloseInput!) {
+  toggle_close(input: \$input) {
+    status
+  }
+}
+''';
+
+const _archiveConvMutation = '''
+mutation ArchiveConversation(\$input: archiveConvInput!) {
+  archive_conv(input: \$input) {
+    status
+  }
+}
+''';
+
 class ConversationsService {
   ConversationsService._();
 
@@ -115,7 +151,47 @@ class ConversationsService {
   static Future<void> readAll(String conversationId) async {
     await GraphQLService.call(
       _readAllMutation,
-      variables: {'input': {'conversation_id': conversationId}},
+      variables: {
+        'input': {'conversation_id': conversationId}
+      },
+    );
+  }
+
+  // ── Conversation actions ────────────────────────────────────────────────
+
+  static Future<void> togglePin(String conversationId, String userId) async {
+    await GraphQLService.call(
+      _togglePinMutation,
+      variables: {
+        'input': {'conversation_id': conversationId, 'user_id': userId}
+      },
+    );
+  }
+
+  static Future<void> toggleMute(String conversationId, String userId) async {
+    await GraphQLService.call(
+      _toggleMuteMutation,
+      variables: {
+        'input': {'conversation_id': conversationId, 'user_id': userId}
+      },
+    );
+  }
+
+  static Future<void> toggleClose(String conversationId) async {
+    await GraphQLService.call(
+      _toggleCloseMutation,
+      variables: {
+        'input': {'conversation_id': conversationId}
+      },
+    );
+  }
+
+  static Future<void> archiveConv(String conversationId) async {
+    await GraphQLService.call(
+      _archiveConvMutation,
+      variables: {
+        'input': {'conversation_id': conversationId}
+      },
     );
   }
 
@@ -189,7 +265,7 @@ class ConversationsService {
 
     // Categorise uploaded files into the four arrays the backend stores
     // (mirrors the FileUpload.js loop in the React client exactly).
-    final imgfile   = <String>[];
+    final imgfile = <String>[];
     final audiofile = <String>[];
     final videofile = <String>[];
     final otherfile = <String>[];
@@ -209,21 +285,21 @@ class ConversationsService {
 
     final input = <String, dynamic>{
       'conversation_id': roomId,
-      'msg_body':        encryptedBody,
-      'msg_type':        msgType,
-      'sender':          selfId,
-      'company_id':      companyId,
-      'participants':    participants,
+      'msg_body': encryptedBody,
+      'msg_type': msgType,
+      'sender': selfId,
+      'company_id': companyId,
+      'participants': participants,
       // is_reply_msg is declared String! (non-null) in msgInput — omitting it
       // causes a GraphQL variable-type error and the mutation is rejected.
-      'is_reply_msg':    'no',
+      'is_reply_msg': 'no',
       if (hasFiles)
         'attach_files': {
-          'imgfile':   imgfile,
+          'imgfile': imgfile,
           'audiofile': audiofile,
           'videofile': videofile,
           'otherfile': otherfile,
-          'allfiles':  attachFiles,
+          'allfiles': attachFiles,
         },
     };
 
@@ -232,8 +308,7 @@ class ConversationsService {
       variables: {'input': input},
     );
 
-    final msgMap =
-        (data['send_msg'] as Map<String, dynamic>?)?['msg']
+    final msgMap = (data['send_msg'] as Map<String, dynamic>?)?['msg']
             as Map<String, dynamic>? ??
         {};
     return ChatMessage.fromJson(msgMap, selfId: selfId);

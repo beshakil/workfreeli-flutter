@@ -5,6 +5,7 @@ import '../core/encryption/encryption_service.dart';
 import '../features/conversations/conversations_providers.dart';
 import '../features/user/user_providers.dart';
 import '../features/xmpp/xmpp_provider.dart';
+import '../shared/home_screen_header.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
 import 'files_screen.dart';
@@ -57,10 +58,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final msgType = data['msg_type']?.toString() ?? '';
     if (msgType == 'media_attachment') return '📎 Attachment';
     try {
-      final raw =
-          EncryptionService.decrypt(data['msg_body']?.toString() ?? '');
-      final stripped =
-          raw.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+      final raw = EncryptionService.decrypt(data['msg_body']?.toString() ?? '');
+      final stripped = raw.replaceAll(RegExp(r'<[^>]+>'), '').trim();
       return stripped.isEmpty ? 'New message' : stripped;
     } catch (_) {
       return 'New message';
@@ -99,8 +98,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           final senderName = data['sendername']?.toString() ??
               data['sender_name']?.toString() ??
               '';
-          final msgTime =
-              data['created_at']?.toString() ?? DateTime.now().toIso8601String();
+          final msgTime = data['created_at']?.toString() ??
+              DateTime.now().toIso8601String();
 
           ref.read(roomPreviewNotifierProvider.notifier).update(
                 convId: convId,
@@ -147,25 +146,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     });
 
     // Total unread for the Messages tab badge.
-    final totalUnread = ref.watch(unreadCountsProvider
-        .select((m) => m.values.fold(0, (a, b) => a + b)));
+    final totalUnread = ref.watch(
+        unreadCountsProvider.select((m) => m.values.fold(0, (a, b) => a + b)));
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: FadeTransition(
-        opacity: _fadeController,
-        child: _screens[_currentIndex],
+      body: SafeArea(
+        child: Column(
+          children: [
+            const HomeScreenHeader(),
+            Expanded(
+              child: FadeTransition(
+                opacity: _fadeController,
+                child: _screens[_currentIndex],
+              ),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {},
+        backgroundColor: const Color(0xFF0F2750),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Icon(
+          Icons.add_rounded,
+          color: Colors.white,
+          size: 28,
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
-          border:
-              Border(top: BorderSide(color: AppTheme.border, width: 1)),
+          border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
         ),
         child: SafeArea(
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -233,16 +251,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     right: -8,
                     top: -4,
                     child: Container(
-                      constraints:
-                          const BoxConstraints(minWidth: 18),
+                      constraints: const BoxConstraints(minWidth: 18),
                       height: 18,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       decoration: BoxDecoration(
                         color: AppTheme.danger,
                         borderRadius: BorderRadius.circular(9),
-                        border: Border.all(
-                            color: AppTheme.bgCard, width: 1.5),
+                        border: Border.all(color: AppTheme.bgCard, width: 1.5),
                       ),
                       child: Center(
                         child: Text(
@@ -264,8 +279,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               style: TextStyle(
                 color: isActive ? AppTheme.primary : AppTheme.textDim,
                 fontSize: 11,
-                fontWeight:
-                    isActive ? FontWeight.w600 : FontWeight.w400,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
           ],
