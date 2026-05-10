@@ -38,9 +38,14 @@ final xmppAutoConnectProvider = FutureProvider<void>((ref) async {
 
   final deviceId = await SecureStorage.getDeviceId() ?? user.id;
 
+  // Read the stored JWT so the registration endpoint can authenticate the call.
+  // The backend's /v1/xmpp_register_user mirrors the GraphQL XMPP_REGISTER_USER
+  // query — both require a Bearer token to return the correct xmpp_user JID.
+  final authToken = await SecureStorage.getToken();
+
   final svc = XmppService.instance;
   // Register first — response gives us the ejabberd username (xmpp_user).
-  await svc.register(userId: user.id, deviceToken: deviceToken);
+  await svc.register(userId: user.id, deviceToken: deviceToken, authToken: authToken);
   // Then open the WebSocket; SASL uses xmpp_user + fixed server password.
   await svc.connect(userId: user.id, deviceId: deviceId);
   debugPrint('[XmppProvider] Auto-connect triggered for ${user.id}');
