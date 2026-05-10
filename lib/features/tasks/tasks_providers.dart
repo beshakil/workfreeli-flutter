@@ -9,12 +9,14 @@ class TasksState {
   final bool isLoading;
   final bool isMutating;
   final String? error;
+  final List<String>? assignToFilter; // null = all tasks, non-empty = filter by assignee
 
   const TasksState({
     this.tasks = const [],
     this.isLoading = false,
     this.isMutating = false,
     this.error,
+    this.assignToFilter,
   });
 
   TasksState copyWith({
@@ -23,24 +25,26 @@ class TasksState {
     bool? isMutating,
     String? error,
     bool clearError = false,
+    List<String>? assignToFilter,
   }) =>
       TasksState(
         tasks: tasks ?? this.tasks,
         isLoading: isLoading ?? this.isLoading,
         isMutating: isMutating ?? this.isMutating,
         error: clearError ? null : (error ?? this.error),
+        assignToFilter: assignToFilter ?? this.assignToFilter,
       );
 
   Map<String, List<Task>> get grouped {
     final map = <String, List<Task>>{
       'not_started': [],
       'inprogress': [],
+      'completed': [],
       'on_hold': [],
       'canceled': [],
-      'completed': [],
     };
-    for (final task in tasks) {
-      (map[task.normalizedStatus] ??= []).add(task);
+    for (final t in tasks) {
+      map[t.normalizedStatus]?.add(t);
     }
     return map;
   }
@@ -53,10 +57,13 @@ class TasksNotifier extends StateNotifier<TasksState> {
     load();
   }
 
-  Future<void> load() async {
-    state = state.copyWith(isLoading: true, clearError: true);
+  Future<void> load({List<String>? assignTo}) async {
+    state = state.copyWith(isLoading: true, clearError: true, assignToFilter: assignTo);
     try {
-      final tasks = await TasksService.getTasks();
+      final all = await TasksService.getTasks();
+      final tasks = assignTo != null && assignTo.isNotEmpty
+          ? all.where((t) => t.assignTo.any(assignTo.contains)).toList()
+          : all;
       state = state.copyWith(tasks: tasks, isLoading: false);
     } catch (e) {
       state = state.copyWith(
@@ -66,24 +73,33 @@ class TasksNotifier extends StateNotifier<TasksState> {
     }
   }
 
+  void filterMyTasks(String userId) {
+    load(assignTo: [userId]);
+  }
+
+  void clearFilter() {
+    load(assignTo: null);
+  }
+
   Future<bool> createTask({
     required String title,
-    required String companyId,
-    String status = 'todo',
+    required String creatorId,
+    required String creatorName,
+    String status = 'not_started',
     String? priority,
     String? startDate,
     String? endDate,
     String? conversationId,
     String? projectId,
     List<String> assignTo = const [],
-    String? notes,
-    String? description,
+    List<String> keywords = const [],
   }) async {
     state = state.copyWith(isMutating: true, clearError: true);
     try {
       final task = await TasksService.createTask(
         title: title,
-        companyId: companyId,
+        creatorId: creatorId,
+        creatorName: creatorName,
         status: status,
         priority: priority,
         startDate: startDate,
@@ -91,8 +107,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
         conversationId: conversationId,
         projectId: projectId,
         assignTo: assignTo,
-        notes: notes,
-        description: description,
+        keywords: keywords,
       );
       state = state.copyWith(
         tasks: [...state.tasks, task],
@@ -120,6 +135,9 @@ class TasksNotifier extends StateNotifier<TasksState> {
     String? notes,
     String? description,
     List<String>? assignTo,
+    List<String>? keywords,
+    List<String>? observers,
+    String? saveType,
   }) async {
     state = state.copyWith(isMutating: true, clearError: true);
     try {
@@ -135,6 +153,9 @@ class TasksNotifier extends StateNotifier<TasksState> {
         notes: notes,
         description: description,
         assignTo: assignTo,
+        keywords: keywords,
+        observers: observers,
+        saveType: saveType,
       );
       state = state.copyWith(
         tasks: state.tasks.map((t) => t.id == id ? updated : t).toList(),

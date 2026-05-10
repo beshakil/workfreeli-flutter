@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/encryption/encryption_service.dart';
+import '../features/conversations/conversations_providers.dart';
+import '../features/user/user_providers.dart';
+import '../features/xmpp/xmpp_provider.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
-import 'tasks_screen.dart';
 import 'files_screen.dart';
 import 'profile_screen.dart';
+import 'tasks_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   late AnimationController _fadeController;
 
@@ -46,8 +53,103 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _fadeController.forward();
   }
 
+  String _buildPreview(Map<String, dynamic> data) {
+    final msgType = data['msg_type']?.toString() ?? '';
+    if (msgType == 'media_attachment') return '📎 Attachment';
+    try {
+      final raw =
+          EncryptionService.decrypt(data['msg_body']?.toString() ?? '');
+      final stripped =
+          raw.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+      return stripped.isEmpty ? 'New message' : stripped;
+    } catch (_) {
+      return 'New message';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Auto-connect XMPP after login — runs once, silently.
+    ref.watch(xmppAutoConnectProvider);
+
+    // Fetch initial unread counts from backend on login — seeds the counter map
+    // so existing unread messages show badges immediately without waiting for
+    // new XMPP events.
+    ref.watch(unreadInitProvider);
+
+    // Global XMPP event handler — lives in HomeScreen so it fires regardless
+    // of which tab is currently active.
+    ref.listen(xmppEventStreamProvider, (_, next) {
+      if (!next.hasValue || next.value == null) return;
+      final event = next.value!;
+      final data = event.data;
+
+      switch (event.type) {
+        case 'new_message':
+        case 'new_reply_message':
+          final convId = data['conversation_id']?.toString() ??
+              data['conv_id']?.toString() ??
+              '';
+          if (convId.isEmpty) return;
+
+          final activeRoom = ref.read(activeRoomIdProvider);
+          final selfId = ref.read(meProvider).value?.id ?? '';
+          final senderId =
+              data['sender']?.toString() ?? data['user_id']?.toString() ?? '';
+          final senderName = data['sendername']?.toString() ??
+              data['sender_name']?.toString() ??
+              '';
+          final msgTime =
+              data['created_at']?.toString() ?? DateTime.now().toIso8601String();
+
+          ref.read(roomPreviewNotifierProvider.notifier).update(
+                convId: convId,
+                senderName: senderName,
+                preview: _buildPreview(data),
+                time: msgTime,
+              );
+
+          if (senderId != selfId && convId != activeRoom) {
+            ref.read(unreadCountsProvider.notifier).increment(convId);
+          }
+
+        case 'read_status_msg':
+          // A user (possibly on another device or the web) marked messages as
+          // read — decrement the local counter to stay in sync.
+          final convId = data['conversation_id']?.toString() ?? '';
+          final read = (data['read'] as num?)?.toInt() ?? 0;
+          final isReply = data['is_reply_msg']?.toString() == 'yes';
+          if (convId.isNotEmpty && !isReply && read > 0) {
+            ref.read(unreadCountsProvider.notifier).decrement(convId, read);
+          }
+
+        case 'new_room':
+          // A new conversation was created (e.g. from the web client).
+          ref.invalidate(roomsProvider);
+
+        case 'update_room':
+          // Conversation metadata changed (participants, title, etc.).
+          ref.invalidate(roomsProvider);
+
+        case 'mute_conversation':
+          ref.invalidate(roomsProvider);
+
+        case 'room_archive':
+          ref.invalidate(roomsProvider);
+
+        case 'kick_out':
+          // User was removed from a conversation.
+          ref.invalidate(roomsProvider);
+
+        case 'pin_unpin':
+          ref.invalidate(roomsProvider);
+      }
+    });
+
+    // Total unread for the Messages tab badge.
+    final totalUnread = ref.watch(unreadCountsProvider
+        .select((m) => m.values.fold(0, (a, b) => a + b)));
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: FadeTransition(
@@ -57,11 +159,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
-          border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
+          border:
+              Border(top: BorderSide(color: AppTheme.border, width: 1)),
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -69,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   icon: Icons.chat_bubble_rounded,
                   label: 'Messages',
                   index: 0,
+                  badge: totalUnread,
                 ),
                 _buildNavItem(
                   icon: Icons.view_kanban_rounded,
@@ -107,7 +212,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? AppTheme.primary.withValues(alpha: 0.12) : Colors.transparent,
+          color: isActive
+              ? AppTheme.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -126,16 +233,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     right: -8,
                     top: -4,
                     child: Container(
-                      width: 18,
+                      constraints:
+                          const BoxConstraints(minWidth: 18),
                       height: 18,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 4),
                       decoration: BoxDecoration(
                         color: AppTheme.danger,
                         borderRadius: BorderRadius.circular(9),
-                        border: Border.all(color: AppTheme.bgCard, width: 1.5),
+                        border: Border.all(
+                            color: AppTheme.bgCard, width: 1.5),
                       ),
                       child: Center(
                         child: Text(
-                          '$badge',
+                          badge > 99 ? '99+' : '$badge',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -153,7 +264,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               style: TextStyle(
                 color: isActive ? AppTheme.primary : AppTheme.textDim,
                 fontSize: 11,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                fontWeight:
+                    isActive ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
           ],

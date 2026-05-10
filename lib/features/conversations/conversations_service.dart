@@ -76,8 +76,48 @@ mutation SendMsg(\$input: msgInput!) {
 }
 ''';
 
+const _getTotalUnreadQuery = '''
+query TotalUnread {
+  total_unread {
+    conversations {
+      conversation_id
+      urmsg
+    }
+  }
+}
+''';
+
+const _readAllMutation = '''
+mutation ReadAll(\$input: readAllInput!) {
+  read_all(input: \$input) {
+    status
+  }
+}
+''';
+
 class ConversationsService {
   ConversationsService._();
+
+  static Future<Map<String, int>> getTotalUnread() async {
+    final data = await GraphQLService.call(_getTotalUnreadQuery);
+    final outer = data['total_unread'] as Map<String, dynamic>? ?? {};
+    final convs = outer['conversations'] as List<dynamic>? ?? [];
+    final map = <String, int>{};
+    for (final c in convs) {
+      final m = c as Map<String, dynamic>;
+      final id = m['conversation_id']?.toString() ?? '';
+      final count = m['urmsg'] as int? ?? 0;
+      if (id.isNotEmpty && count > 0) map[id] = count;
+    }
+    return map;
+  }
+
+  static Future<void> readAll(String conversationId) async {
+    await GraphQLService.call(
+      _readAllMutation,
+      variables: {'input': {'conversation_id': conversationId}},
+    );
+  }
 
   static Future<List<Room>> getRooms(String userId) async {
     final data = await GraphQLService.call(

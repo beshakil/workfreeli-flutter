@@ -11,10 +11,13 @@ class SecureStorage {
   static const _refreshTokenKey = 'refresh_token';
   static const _deviceIdKey = 'device_id';
   static const _trustedKey = 'trusted_device';
+  static const _xmppDeviceTokenKey = 'xmpp_device_token';
 
   static Future<String?> getToken() => _storage.read(key: _tokenKey);
   static Future<String?> getRefreshToken() => _storage.read(key: _refreshTokenKey);
   static Future<String?> getDeviceId() => _storage.read(key: _deviceIdKey);
+  static Future<String?> getXmppDeviceToken() => _storage.read(key: _xmppDeviceTokenKey);
+  static Future<void> saveXmppDeviceToken(String t) => _storage.write(key: _xmppDeviceTokenKey, value: t);
 
   static Future<bool> isTrusted() async =>
       await _storage.read(key: _trustedKey) == 'true';

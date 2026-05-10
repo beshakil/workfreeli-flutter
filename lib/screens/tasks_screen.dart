@@ -444,16 +444,19 @@ class _CreateTaskFab extends ConsumerStatefulWidget {
 
 class _CreateTaskFabState extends ConsumerState<_CreateTaskFab> {
   final _titleCtrl = TextEditingController();
-  String  _status   = 'Not Started';
+  String  _status    = 'not_started';
   String? _priority;
+  String? _startDate;
+  String? _endDate;
+  final List<String> _assignTo = [];
+  final List<String> _keywords = [];
 
-  // Matches web column order
   static const _statusOptions = [
-    ('Not Started', 'Not Started'),
-    ('In Progress', 'In Progress'),
-    ('Completed',   'Completed'),
-    ('On Hold',     'On Hold'),
-    ('Canceled',    'Canceled'),
+    ('not_started', 'Not Started'),
+    ('inprogress',  'In Progress'),
+    ('completed',   'Completed'),
+    ('on_hold',     'On Hold'),
+    ('canceled',    'Canceled'),
   ];
   static const _priorityOptions = [
     (null,     'None'),
@@ -468,10 +471,49 @@ class _CreateTaskFabState extends ConsumerState<_CreateTaskFab> {
     super.dispose();
   }
 
+  String _fmtDate(String? iso) {
+    if (iso == null) return '';
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '';
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _pickDate(
+    BuildContext ctx,
+    String? current,
+    void Function(String?) onPicked,
+  ) async {
+    final initial = (current != null ? DateTime.tryParse(current) : null) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: ctx,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (ctx, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppTheme.primary,
+            onPrimary: Colors.white,
+            surface: AppTheme.bgCard,
+          ),
+          dialogTheme: DialogThemeData(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) onPicked(picked.toIso8601String());
+  }
+
   void _showCreateSheet() {
     _titleCtrl.clear();
-    _status   = 'Not Started';
-    _priority = null;
+    _status    = 'not_started';
+    _priority  = null;
+    _startDate = null;
+    _endDate   = null;
+    _assignTo.clear();
+    _keywords.clear();
 
     showModalBottomSheet(
       context: context,
@@ -483,121 +525,255 @@ class _CreateTaskFabState extends ConsumerState<_CreateTaskFab> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModal) => Padding(
           padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppTheme.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('Create Task', style: AppTheme.headingSmall),
-              const SizedBox(height: 16),
-
+              // ── Header ──────────────────────────────────────────
               Container(
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 14),
                 decoration: BoxDecoration(
-                  color: AppTheme.bgElevated,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.border),
+                  border: Border(bottom: BorderSide(color: AppTheme.border)),
                 ),
-                child: TextField(
-                  controller: _titleCtrl,
-                  style: AppTheme.bodyMedium,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Task title…',
-                    hintStyle: AppTheme.bodyMedium
-                        .copyWith(color: AppTheme.textDim),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    border: InputBorder.none,
-                  ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_box_outlined,
+                        color: AppTheme.primary, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Create a task', style: AppTheme.headingSmall),
+                          Text('Fill in the details below',
+                              style: AppTheme.caption.copyWith(
+                                  color: AppTheme.textMuted)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded,
+                          color: AppTheme.textMuted, size: 20),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
 
-              Row(children: [
-                Expanded(
-                  child: _DropdownField<String>(
-                    label: 'Status',
-                    value: _status,
-                    items: _statusOptions
-                        .map((e) => DropdownMenuItem(
-                              value: e.$1,
-                              child: Text(e.$2,
-                                  style: AppTheme.bodySmall.copyWith(
-                                      color: AppTheme.textPrimary)),
-                            ))
-                        .toList(),
-                    onChanged: (v) =>
-                        setModal(() => _status = v ?? 'Not Started'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _DropdownField<String?>(
-                    label: 'Priority',
-                    value: _priority,
-                    items: _priorityOptions
-                        .map((e) => DropdownMenuItem(
-                              value: e.$1,
-                              child: Text(e.$2,
-                                  style: AppTheme.bodySmall.copyWith(
-                                      color: AppTheme.textPrimary)),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setModal(() => _priority = v),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 20),
+              // ── Body ────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgElevated,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: TextField(
+                        controller: _titleCtrl,
+                        style: AppTheme.bodyMedium,
+                        autofocus: true,
+                        maxLines: 2,
+                        minLines: 1,
+                        decoration: InputDecoration(
+                          hintText: 'Task title…',
+                          hintStyle: AppTheme.bodyMedium
+                              .copyWith(color: AppTheme.textDim),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          border: InputBorder.none,
+                          suffixIcon: ValueListenableBuilder(
+                            valueListenable: _titleCtrl,
+                            builder: (_, v, __) => v.text.isNotEmpty
+                                ? GestureDetector(
+                                    onTap: () => setModal(_titleCtrl.clear),
+                                    child: const Icon(Icons.close_rounded,
+                                        color: AppTheme.textDim, size: 18),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
 
-              Consumer(builder: (ctx, ref, _) {
-                final loading =
-                    ref.watch(tasksNotifierProvider).isMutating;
-                return GestureDetector(
-                  onTap: loading ? null : () => _submit(ctx, ref),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient:
-                          loading ? null : AppTheme.accentGradient,
-                      color: loading ? AppTheme.bgElevated : null,
-                      borderRadius: BorderRadius.circular(14),
+                    // Status + Priority
+                    Row(children: [
+                      Expanded(
+                        child: _DropdownField<String>(
+                          label: 'Status',
+                          value: _status,
+                          items: _statusOptions
+                              .map((e) => DropdownMenuItem(
+                                    value: e.$1,
+                                    child: Text(e.$2,
+                                        style: AppTheme.bodySmall.copyWith(
+                                            color: AppTheme.textPrimary)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) =>
+                              setModal(() => _status = v ?? 'not_started'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _DropdownField<String?>(
+                          label: 'Priority',
+                          value: _priority,
+                          items: _priorityOptions
+                              .map((e) => DropdownMenuItem(
+                                    value: e.$1,
+                                    child: Text(e.$2,
+                                        style: AppTheme.bodySmall.copyWith(
+                                            color: AppTheme.textPrimary)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) => setModal(() => _priority = v),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 14),
+
+                    // Dates
+                    Row(children: [
+                      Expanded(
+                        child: _DatePickerField(
+                          label: 'Start Date',
+                          value: _fmtDate(_startDate),
+                          icon: Icons.event_rounded,
+                          onTap: () => _pickDate(ctx, _startDate, (v) =>
+                              setModal(() => _startDate = v)),
+                          onClear: _startDate != null
+                              ? () => setModal(() => _startDate = null)
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _DatePickerField(
+                          label: 'Due Date',
+                          value: _fmtDate(_endDate),
+                          icon: Icons.event_available_rounded,
+                          onTap: () => _pickDate(ctx, _endDate, (v) =>
+                              setModal(() => _endDate = v)),
+                          onClear: _endDate != null
+                              ? () => setModal(() => _endDate = null)
+                              : null,
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 14),
+
+                    // Keywords chips
+                    if (_keywords.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: _keywords
+                            .map((kw) => GestureDetector(
+                                  onTap: () =>
+                                      setModal(() => _keywords.remove(kw)),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primary
+                                          .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                          color: AppTheme.primary
+                                              .withValues(alpha: 0.3)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(kw,
+                                            style: AppTheme.caption.copyWith(
+                                                color: AppTheme.primary,
+                                                fontWeight: FontWeight.w600)),
+                                        const SizedBox(width: 5),
+                                        const Icon(Icons.close_rounded,
+                                            size: 11, color: AppTheme.primary),
+                                      ],
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+
+                    // Add keyword button
+                    GestureDetector(
+                      onTap: () => _showAddKeywordDialog(ctx, setModal),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgElevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.add_rounded,
+                                size: 15, color: AppTheme.primary),
+                            const SizedBox(width: 6),
+                            Text('Add a keyword',
+                                style: AppTheme.caption.copyWith(
+                                    color: AppTheme.primary,
+                                    fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Center(
-                      child: loading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.accent),
-                            )
-                          : Text(
-                              'Create Task',
-                              style: AppTheme.bodyMedium.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                );
-              }),
+                    const SizedBox(height: 20),
+
+                    // Create button
+                    Consumer(builder: (ctx, ref, _) {
+                      final loading =
+                          ref.watch(tasksNotifierProvider).isMutating;
+                      return GestureDetector(
+                        onTap: loading ? null : () => _submit(ctx, ref),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          height: 50,
+                          decoration: BoxDecoration(
+                            gradient:
+                                loading ? null : AppTheme.accentGradient,
+                            color: loading ? AppTheme.bgElevated : null,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Center(
+                            child: loading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppTheme.accent),
+                                  )
+                                : Text(
+                                    'Create Task',
+                                    style: AppTheme.bodyMedium.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -605,21 +781,75 @@ class _CreateTaskFabState extends ConsumerState<_CreateTaskFab> {
     );
   }
 
+  void _showAddKeywordDialog(BuildContext ctx, StateSetter setModal) {
+    final ctrl = TextEditingController();
+    showDialog<String>(
+      context: ctx,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Add Keyword', style: AppTheme.headingSmall),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: AppTheme.bodyMedium,
+          decoration: InputDecoration(
+            hintText: 'Keyword…',
+            hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textDim),
+            filled: true,
+            fillColor: AppTheme.bgElevated,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppTheme.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppTheme.border),
+            ),
+          ),
+          onSubmitted: (v) => Navigator.pop(dctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx),
+            child: Text('Cancel',
+                style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, ctrl.text.trim()),
+            child: Text('Add',
+                style: AppTheme.bodySmall.copyWith(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    ).then((kw) {
+      if (kw != null && kw.isNotEmpty && !_keywords.contains(kw)) {
+        setModal(() => _keywords.add(kw));
+      }
+    });
+  }
+
   Future<void> _submit(BuildContext sheetCtx, WidgetRef ref) async {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) return;
 
-    final user = ref.read(meProvider).value;
-    if (user == null) return;
+    final me = ref.read(meProvider).value;
+    if (me == null) return;
 
-    // Capture navigator before async gap
     final sheetNav = Navigator.of(sheetCtx);
 
     final ok = await ref.read(tasksNotifierProvider.notifier).createTask(
           title: title,
-          companyId: user.companyId,
+          // Mirror React: conversation_id = user.id, participants = [user.id]
+          // when creating from the tasks board (not inside a conversation).
+          creatorId: me.id,
+          creatorName: me.fullName,
           status: _status,
           priority: _priority,
+          startDate: _startDate,
+          endDate: _endDate,
+          assignTo: List.unmodifiable(_assignTo),
+          keywords: List.unmodifiable(_keywords),
         );
 
     if (!mounted) return;
@@ -699,6 +929,78 @@ class _DropdownField<T> extends StatelessWidget {
                   .copyWith(color: AppTheme.textPrimary),
               items: items,
               onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DatePickerField extends StatelessWidget {
+  const _DatePickerField({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+    this.onClear,
+  });
+
+  final String     label;
+  final String     value;
+  final IconData   icon;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasValue = value.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: AppTheme.caption.copyWith(color: AppTheme.textMuted)),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: hasValue
+                  ? AppTheme.primary.withValues(alpha: 0.07)
+                  : AppTheme.bgElevated,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: hasValue
+                    ? AppTheme.primary.withValues(alpha: 0.4)
+                    : AppTheme.border,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon,
+                    size: 14,
+                    color: hasValue ? AppTheme.primary : AppTheme.textDim),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    hasValue ? value : 'Set date',
+                    style: AppTheme.bodySmall.copyWith(
+                      color: hasValue ? AppTheme.primary : AppTheme.textDim,
+                      fontWeight:
+                          hasValue ? FontWeight.w500 : FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (onClear != null && hasValue)
+                  GestureDetector(
+                    onTap: onClear,
+                    child: const Icon(Icons.close_rounded,
+                        size: 14, color: AppTheme.textDim),
+                  ),
+              ],
             ),
           ),
         ),

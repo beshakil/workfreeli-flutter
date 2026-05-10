@@ -1,12 +1,12 @@
 import '../../core/network/graphql_client.dart';
 import 'task_models.dart';
 
-// ── Queries ───────────────────────────────────────────────────────────────────
+// ── List query ────────────────────────────────────────────────────────────────
 
 // `read_all: "yes"` mirrors the React web client — tells the backend to return
 // all tasks the user has access to, not only tasks directly assigned to them.
-// `status` uses [String!] (non-null items) — React uses the same type and the
-// backend schema rejects [String] with a type-mismatch error.
+// `status` uses [String!] — React uses the same type; the backend schema
+// rejects [String] (nullable-item list) with a type-mismatch error.
 const _getTasksQuery = '''
 query Tasks(
   \$view_type: String!
@@ -36,6 +36,8 @@ query Tasks(
       notes
       description
       assign_to
+      key_words
+      observers
       conversation_id
       conversation_name
       project_id
@@ -49,28 +51,107 @@ query Tasks(
 }
 ''';
 
+// ── Detail query ──────────────────────────────────────────────────────────────
+
+const _getTaskDetailQuery = '''
+query GetTaskDetail(\$id: String!) {
+  task(_id: \$id) {
+    _id
+    task_title
+    status
+    priority
+    start_date
+    end_date
+    due_time
+    progress
+    notes
+    description
+    assign_to
+    key_words
+    observers
+    owned_by
+    conversation_id
+    conversation_name
+    project_id
+    project_title
+    is_archive
+    has_delete
+    created_by
+    created_at
+    checklists {
+      _id
+      item_title
+      checked
+    }
+    files {
+      _id
+      originalname
+      file_type
+      file_size
+      location
+      created_at
+      uploaded_by
+      tag_list_details {
+        tag_id
+        title
+        tag_color
+      }
+    }
+    discussion {
+      _id
+      msg_body
+      created_by
+      created_at
+      attach_files {
+        allfiles {
+          originalname
+          file_type
+          location
+          file_size
+        }
+      }
+    }
+    hour_breakdown {
+      _id
+      fdate
+      tdate
+      forecasted_hours
+      actual_hour
+      note
+    }
+    cost_breakdown {
+      _id
+      cost_title
+      forecasted_cost
+      actual_cost
+    }
+  }
+}
+''';
+
 // ── Mutations ─────────────────────────────────────────────────────────────────
 
+// Schema-verified: create_quick_tasks returns [TaskType] directly —
+// no {status, message, data} wrapper unlike the tasks query.
+// createTaskInput required fields: task_title, conversation_id,
+// conversation_name, participants (all must be provided, even as empty).
 const _createTaskMutation = '''
 mutation CreateTask(\$input: [createTaskInput!]!) {
   create_quick_tasks(input: \$input) {
+    _id
+    task_title
     status
-    message
-    data {
-      _id
-      task_title
-      status
-      priority
-      start_date
-      end_date
-      assign_to
-      conversation_id
-      conversation_name
-      project_id
-      project_title
-      created_by
-      created_at
-    }
+    priority
+    start_date
+    end_date
+    assign_to
+    key_words
+    conversation_id
+    conversation_name
+    project_id
+    project_title
+    created_by
+    created_at
   }
 }
 ''';
@@ -92,6 +173,8 @@ mutation UpdateTask(\$input: updateTaskInput!) {
       notes
       description
       assign_to
+      key_words
+      observers
       conversation_id
       conversation_name
       is_archive
@@ -141,31 +224,54 @@ class TasksService {
         .toList();
   }
 
+  static Future<Task> getTaskDetail(String id) async {
+    final data = await GraphQLService.call(
+      _getTaskDetailQuery,
+      variables: {'id': id},
+    );
+
+    final taskData = data['task'] as Map<String, dynamic>?;
+    if (taskData == null) throw const GqlException('Task detail not found.');
+    return Task.fromJson(taskData);
+  }
+
+  // createTaskInput only accepts these fields (schema-verified):
+  //   task_title!, conversation_id!, conversation_name!, participants!,
+  //   project_id, created_at, start_date, end_date, status,
+  //   assign_to, observers, key_words
+  //
+  // priority/notes/description/due_time are NOT in createTaskInput.
+  // If priority is provided, a follow-up updateTask call sets it.
+  // React fallback (CreateQuickTask.js:70-72): when not inside a conversation,
+  // conversation_id = user.id, participants = [user.id], conversation_name = full name.
   static Future<Task> createTask({
     required String title,
-    required String companyId,
-    String status = 'todo',
+    required String creatorId,
+    required String creatorName,
+    String status = 'not_started',
     String? priority,
     String? startDate,
     String? endDate,
     String? conversationId,
     String? projectId,
     List<String> assignTo = const [],
-    String? notes,
-    String? description,
+    List<String> keywords = const [],
   }) async {
+    final resolvedConvId = (conversationId != null && conversationId.isNotEmpty)
+        ? conversationId
+        : creatorId;
+
     final input = {
       'task_title': title,
-      'company_id': companyId,
       'status': status,
-      if (priority != null) 'priority': priority,
+      'conversation_id': resolvedConvId,
+      'conversation_name': creatorName,
+      'participants': [creatorId],
       if (startDate != null) 'start_date': startDate,
       if (endDate != null) 'end_date': endDate,
-      if (conversationId != null) 'conversation_id': conversationId,
       if (projectId != null) 'project_id': projectId,
       if (assignTo.isNotEmpty) 'assign_to': assignTo,
-      if (notes != null) 'notes': notes,
-      if (description != null) 'description': description,
+      if (keywords.isNotEmpty) 'key_words': keywords,
     };
 
     final data = await GraphQLService.call(
@@ -173,10 +279,32 @@ class TasksService {
       variables: {'input': [input]},
     );
 
-    final response = data['create_quick_tasks'] as Map<String, dynamic>? ?? {};
-    final list = response['data'] as List<dynamic>? ?? [];
-    if (list.isEmpty) throw const GqlException('Task creation returned no data.');
-    return Task.fromJson(list.first as Map<String, dynamic>);
+    // ignore: avoid_print
+    print('[createTask] server raw: ${data['create_quick_tasks']}');
+
+    final rawResult = data['create_quick_tasks'];
+    if (rawResult == null) {
+      // Server swallowed an error — check backend console for [create_tasks] OUTER CATCH
+      throw const GqlException(
+          'Task creation failed on server. Check server logs.');
+    }
+    final list = rawResult as List<dynamic>;
+    if (list.isEmpty) {
+      // Backend returned [] — either plan limit reached or create_tasks failed silently
+      throw const GqlException(
+          'Task creation failed: plan limit reached or server error. Check server logs.');
+    }
+    Task task = Task.fromJson(list.first as Map<String, dynamic>);
+
+    // priority is not in createTaskInput — set via a follow-up update.
+    if (priority != null) {
+      try {
+        task = await updateTask(id: task.id, priority: priority);
+      } catch (_) {
+        // Non-fatal: task was created, priority just didn't apply.
+      }
+    }
+    return task;
   }
 
   static Future<Task> updateTask({
@@ -191,6 +319,9 @@ class TasksService {
     String? notes,
     String? description,
     List<String>? assignTo,
+    List<String>? keywords,
+    List<String>? observers,
+    String? saveType,
   }) async {
     final input = <String, dynamic>{'_id': id};
     if (title != null) input['task_title'] = title;
@@ -203,15 +334,21 @@ class TasksService {
     if (notes != null) input['notes'] = notes;
     if (description != null) input['description'] = description;
     if (assignTo != null) input['assign_to'] = assignTo;
+    if (keywords != null) input['key_words'] = keywords;
+    if (observers != null) input['observers'] = observers;
+    if (saveType != null) input['save_type'] = saveType;
 
     final data = await GraphQLService.call(
       _updateTaskMutation,
       variables: {'input': input},
     );
 
-    final response = data['update_single_task'] as Map<String, dynamic>? ?? {};
+    final response =
+        data['update_single_task'] as Map<String, dynamic>? ?? {};
     final taskData = response['data'] as Map<String, dynamic>?;
-    if (taskData == null) throw const GqlException('Task update returned no data.');
+    if (taskData == null) {
+      throw const GqlException('Task update returned no data.');
+    }
     return Task.fromJson(taskData);
   }
 

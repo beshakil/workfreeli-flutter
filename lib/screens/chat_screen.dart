@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../theme/app_theme.dart';
+
 import '../core/models/conversation_models.dart';
 import '../features/conversations/conversations_providers.dart';
 import '../features/user/user_providers.dart';
+import '../theme/app_theme.dart';
 import 'message_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -18,6 +19,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String _searchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -25,7 +31,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final roomsAsync = ref.watch(roomsProvider);
+    // sortedRoomsProvider merges server rooms with XMPP-driven previews and re-sorts.
+    final roomsAsync = ref.watch(sortedRoomsProvider);
     final meAsync = ref.watch(meProvider);
 
     return Scaffold(
@@ -106,10 +113,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ],
             ),
           ),
-          _HeaderBtn(
-            icon: Icons.edit_square,
-            onTap: () {},
-          ),
+          _HeaderBtn(icon: Icons.edit_square, onTap: () {}),
         ],
       ),
     );
@@ -133,8 +137,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           decoration: InputDecoration(
             hintText: 'Search conversations…',
             hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textDim),
-            prefixIcon: Icon(Icons.search_rounded,
-                color: AppTheme.textDim, size: 18),
+            prefixIcon:
+                Icon(Icons.search_rounded, color: AppTheme.textDim, size: 18),
             suffixIcon: _searchQuery.isNotEmpty
                 ? GestureDetector(
                     onTap: () {
@@ -153,13 +157,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildSkeletons() {
-    return ListView.builder(
-      itemCount: 10,
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      itemBuilder: (_, __) => const _SkeletonTile(),
-    );
-  }
+  Widget _buildSkeletons() => ListView.builder(
+        itemCount: 10,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemBuilder: (_, __) => const _SkeletonTile(),
+      );
 
   Widget _buildError(String message, {required VoidCallback onRetry}) {
     return Center(
@@ -170,11 +172,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           children: [
             Icon(Icons.wifi_off_rounded, size: 52, color: AppTheme.textDim),
             const SizedBox(height: 16),
-            Text(
-              'Could not load conversations',
-              style:
-                  AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-            ),
+            Text('Could not load conversations',
+                style:
+                    AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(message,
                 style: AppTheme.caption, textAlign: TextAlign.center),
@@ -228,7 +228,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off_rounded, size: 48, color: AppTheme.textDim),
+          Icon(Icons.search_off_rounded,
+              size: 48, color: AppTheme.textDim),
           const SizedBox(height: 16),
           Text('No results for "$_searchQuery"',
               style:
@@ -238,6 +239,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 }
+
+// ── Header button ─────────────────────────────────────────────────────────────
 
 class _HeaderBtn extends StatelessWidget {
   const _HeaderBtn({required this.icon, required this.onTap});
@@ -262,9 +265,9 @@ class _HeaderBtn extends StatelessWidget {
   }
 }
 
-// ─── Room Tile ───────────────────────────────────────────────────────────────
+// ─── Room Tile ────────────────────────────────────────────────────────────────
 
-class _RoomTile extends StatelessWidget {
+class _RoomTile extends ConsumerWidget {
   const _RoomTile({required this.room, required this.selfId});
 
   final Room room;
@@ -279,8 +282,12 @@ class _RoomTile extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = _gradients[room.id.hashCode.abs() % _gradients.length];
+    // Watch per-conversation unread count — rebuilds only this tile.
+    final unread = ref.watch(
+      unreadCountsProvider.select((m) => m[room.id] ?? 0),
+    );
 
     return InkWell(
       onTap: () {
@@ -294,8 +301,38 @@ class _RoomTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            // Avatar
-            _RoomAvatar(room: room, colors: colors),
+            // Avatar with unread badge
+            Stack(
+              children: [
+                _RoomAvatar(room: room, colors: colors),
+                if (unread > 0)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 18),
+                      height: 18,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.danger,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                            color: AppTheme.bg, width: 1.5),
+                      ),
+                      child: Center(
+                        child: Text(
+                          unread > 99 ? '99+' : '$unread',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(width: 14),
 
             // Content
@@ -305,7 +342,6 @@ class _RoomTile extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      // Title
                       Expanded(
                         child: Row(
                           children: [
@@ -318,17 +354,29 @@ class _RoomTile extends StatelessWidget {
                               child: Text(
                                 room.title,
                                 style: AppTheme.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.w600),
+                                  fontWeight: unread > 0
+                                      ? FontWeight.w700
+                                      : FontWeight.w600,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      // Time
                       if (room.formattedTime.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        Text(room.formattedTime, style: AppTheme.caption),
+                        Text(
+                          room.formattedTime,
+                          style: AppTheme.caption.copyWith(
+                            color: unread > 0
+                                ? AppTheme.primary
+                                : AppTheme.textDim,
+                            fontWeight: unread > 0
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -345,8 +393,19 @@ class _RoomTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          room.isGroup ? 'Channel' : 'Direct message',
-                          style: AppTheme.caption,
+                          room.lastMsgPreview?.isNotEmpty == true
+                              ? room.lastMsgPreview!
+                              : room.isGroup
+                                  ? 'Channel'
+                                  : 'Direct message',
+                          style: AppTheme.caption.copyWith(
+                            color: unread > 0
+                                ? AppTheme.textMuted
+                                : AppTheme.textDim,
+                            fontWeight: unread > 0
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -367,9 +426,10 @@ class _RoomTile extends StatelessWidget {
   }
 }
 
+// ── Avatar ────────────────────────────────────────────────────────────────────
+
 class _RoomAvatar extends StatelessWidget {
   const _RoomAvatar({required this.room, required this.colors});
-
   final Room room;
   final List<Color> colors;
 
@@ -381,9 +441,12 @@ class _RoomAvatar extends StatelessWidget {
           width: 50,
           height: 50,
           decoration: BoxDecoration(
-            gradient:
-                LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
-            borderRadius: BorderRadius.circular(room.isGroup ? 14 : 25),
+            gradient: LinearGradient(
+                colors: colors,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight),
+            borderRadius:
+                BorderRadius.circular(room.isGroup ? 14 : 25),
           ),
           child: Center(
             child: Text(
@@ -396,7 +459,6 @@ class _RoomAvatar extends StatelessWidget {
             ),
           ),
         ),
-        // Closed-for indicator
         if (room.isClosedFor)
           Positioned(
             right: 0,
@@ -409,8 +471,8 @@ class _RoomAvatar extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppTheme.bg, width: 2),
               ),
-              child: const Icon(Icons.lock_rounded,
-                  size: 7, color: Colors.white),
+              child:
+                  const Icon(Icons.lock_rounded, size: 7, color: Colors.white),
             ),
           ),
       ],
@@ -418,7 +480,7 @@ class _RoomAvatar extends StatelessWidget {
   }
 }
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 class _SkeletonTile extends StatelessWidget {
   const _SkeletonTile();

@@ -3,11 +3,18 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import '../core/config/app_config.dart';
-import '../theme/app_theme.dart';
 import '../core/models/conversation_models.dart';
 import '../features/conversations/conversations_providers.dart';
+import '../features/files/files_service.dart';
+import '../features/xmpp/xmpp_provider.dart';
+import '../theme/app_theme.dart';
+import '../widgets/image_preview_screen.dart';
+import '../widgets/tag_selection_sheet.dart';
 
 class MessageScreen extends ConsumerStatefulWidget {
   const MessageScreen({super.key, required this.room, required this.selfId});
@@ -35,10 +42,22 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+
+    // Mark this conversation as active so unread stops incrementing.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(activeRoomIdProvider.notifier).state = widget.room.id;
+      ref.read(unreadCountsProvider.notifier).reset(widget.room.id);
+      // Tell the backend the user has read all messages — keeps server unread
+      // count in sync so the next login shows the correct badge.
+      ConversationsService.readAll(widget.room.id).catchError((_) {});
+    });
   }
 
   @override
   void dispose() {
+    // Clear active room so unread resumes on future messages.
+    ref.read(activeRoomIdProvider.notifier).state = null;
+
     _msgController.dispose();
     _scrollController
       ..removeListener(_onScroll)
@@ -52,6 +71,28 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
         _scrollController.position.maxScrollExtent - 300) {
       ref.read(messagesProvider(_args).notifier).loadMore();
     }
+  }
+
+  // ── XMPP real-time injection ──────────────────────────────────────────────
+
+  /// Called by ref.listen every time a new XMPP event arrives.
+  /// Mirrors React client: only process messages from OTHER users — own
+  /// messages are already added by the GraphQL mutation response.
+  void _handleXmppEvent(XmppEvent event) {
+    if (event.type != 'new_message' && event.type != 'new_reply_message') return;
+
+    // Skip XMPP echo of own messages — GraphQL sendMessage() already prepends
+    // them. Processing the echo would cause a duplicate (race condition when
+    // XMPP broadcast arrives before mutation response completes).
+    final senderId = event.data['sender']?.toString() ??
+        event.data['user_id']?.toString() ?? '';
+    if (senderId == widget.selfId) return;
+
+    final msg = MessagesNotifier.parseXmppMessage(
+        event.data, widget.selfId, widget.room.id);
+    if (msg == null) return;
+    ref.read(messagesProvider(_args).notifier).addRealTimeMessage(msg);
+    _scrollToTop();
   }
 
   // ── File picker ─────────────────────────────────────────────────────────────
@@ -69,13 +110,24 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     }
   }
 
-  // ── Send ────────────────────────────────────────────────────────────────────
+  // ── Send (with optional tag selection) ─────────────────────────────────────
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _msgController.text.trim();
     final hasPendingFiles =
         ref.read(messagesProvider(_args)).pendingFiles.isNotEmpty;
     if (text.isEmpty && !hasPendingFiles) return;
+
+    // If there are files, offer tag selection before sending.
+    if (hasPendingFiles) {
+      final tags = await showTagSelectionSheet(
+        context,
+        conversationId: widget.room.id,
+      );
+      // null means user dismissed the sheet → abort send.
+      if (tags == null) return;
+      // tags == [] means "skip tags" → proceed with send.
+    }
 
     _msgController.clear();
     ref.read(messagesProvider(_args).notifier).sendMessage(text);
@@ -94,9 +146,67 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     });
   }
 
+  // ── File download helper (used by _AttachmentCard) ──────────────────────
+
+  Future<void> _downloadAndOpen(MessageAttachment attachment) async {
+    final url = attachment.downloadUrl(AppConfig.fileBaseUrl);
+    if (url.isEmpty) return;
+
+    // Android < API 29 needs storage permission.
+    if (Platform.isAndroid) {
+      final status = await Permission.storage.status;
+      if (!status.isGranted) await Permission.storage.request();
+    }
+
+    try {
+      final dir = await _downloadDir();
+      final savePath = '${dir.path}/${attachment.originalName}';
+
+      _showSnack('Downloading…');
+      await FilesService.downloadFile(url: url, savePath: savePath);
+      if (!mounted) return;
+      _showSnack('Saved. Opening…');
+      await OpenFilex.open(savePath);
+    } catch (e) {
+      _showSnack('Download failed');
+    }
+  }
+
+  Future<Directory> _downloadDir() async {
+    if (Platform.isAndroid) {
+      final ext = await getExternalStorageDirectory();
+      if (ext != null) {
+        final dir = Directory('${ext.path}/Downloads');
+        if (!dir.existsSync()) dir.createSync(recursive: true);
+        return dir;
+      }
+    }
+    return getApplicationDocumentsDirectory();
+  }
+
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content:
+            Text(msg, style: AppTheme.bodySmall.copyWith(color: Colors.white)),
+        backgroundColor: AppTheme.bgElevated,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(messagesProvider(_args));
+
+    // Listen for real-time XMPP events while this screen is open.
+    ref.listen(xmppEventStreamProvider, (_, next) {
+      if (next.hasValue && next.value != null) {
+        _handleXmppEvent(next.value!);
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -105,7 +215,6 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
           _buildHeader(context),
           if (state.error != null) _buildErrorBanner(state.error!),
           Expanded(child: _buildMessageList(state)),
-          // Pending files preview strip
           if (state.pendingFiles.isNotEmpty)
             _buildPendingFilesBar(state.pendingFiles),
           _buildInputArea(state),
@@ -187,6 +296,8 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                       Icon(Icons.volume_off_rounded,
                           size: 12, color: AppTheme.textDim),
                     ],
+                    // Show XMPP connection indicator
+                    _XmppStatusDot(),
                   ],
                 ),
               ],
@@ -226,21 +337,16 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     );
   }
 
-  // ─── Pending files preview strip ───────────────────────────────────────────
+  // ─── Pending files bar ─────────────────────────────────────────────────────
 
   Widget _buildPendingFilesBar(List<File> files) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-        12,
-        10,
-        12,
-        MediaQuery.of(context).padding.bottom + 10,
-      ),
+          12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
-        border: Border(
-          top: BorderSide(color: AppTheme.border, width: 0.5),
-        ),
+        border:
+            Border(top: BorderSide(color: AppTheme.border, width: 0.5)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -248,11 +354,8 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.attach_file_rounded,
-                size: 14,
-                color: AppTheme.primary,
-              ),
+              Icon(Icons.attach_file_rounded,
+                  size: 14, color: AppTheme.primary),
               const SizedBox(width: 6),
               Text(
                 '${files.length} file${files.length > 1 ? 's' : ''} ready to send',
@@ -263,15 +366,13 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
               ),
               const Spacer(),
               TextButton(
-                onPressed: () =>
-                    ref.read(messagesProvider(_args).notifier).clearPendingFiles(),
-                child: Text(
-                  'Clear all',
-                  style: AppTheme.caption.copyWith(
-                    color: AppTheme.danger,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                onPressed: () => ref
+                    .read(messagesProvider(_args).notifier)
+                    .clearPendingFiles(),
+                child: Text('Clear all',
+                    style: AppTheme.caption.copyWith(
+                        color: AppTheme.danger,
+                        fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -293,28 +394,11 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                     Container(
                       width: 100,
                       padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.bgElevated,
-                    AppTheme.bgElevated.withValues(alpha: 0.85),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppTheme.border.withValues(alpha: 0.6),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgElevated,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.border),
+                      ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -332,7 +416,6 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                                   color: AppTheme.primary,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ),
@@ -340,10 +423,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                           const SizedBox(height: 6),
                           Text(
                             name,
-                            style: AppTheme.caption.copyWith(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: AppTheme.caption.copyWith(fontSize: 11),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
@@ -364,10 +444,8 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                           decoration: BoxDecoration(
                             color: AppTheme.danger,
                             shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 1.5,
-                            ),
+                            border:
+                                Border.all(color: Colors.white, width: 1.5),
                           ),
                           child: const Icon(Icons.close_rounded,
                               color: Colors.white, size: 10),
@@ -413,10 +491,11 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
             ),
             const SizedBox(height: 16),
             Text('No messages yet',
-                style:
-                    AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                style: AppTheme.bodyMedium
+                    .copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('Be the first to say something!', style: AppTheme.caption),
+            Text('Be the first to say something!',
+                style: AppTheme.caption),
           ],
         ),
       );
@@ -456,9 +535,25 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
           message: msg,
           showHeader: showHeader,
           showTime: showTime,
+          onOpenAttachment: _onOpenAttachment,
         );
       },
     );
+  }
+
+  // ── Attachment tap handler ─────────────────────────────────────────────────
+
+  void _onOpenAttachment(ChatMessage msg, MessageAttachment attachment) {
+    if (attachment.isImage) {
+      // Collect all image attachments in the message for gallery swipe.
+      final images =
+          msg.attachments.where((a) => a.isImage).toList();
+      final idx = images.indexOf(attachment);
+      showImagePreview(context, attachments: images, initialIndex: idx);
+    } else {
+      // Non-image: download + open with system app.
+      _downloadAndOpen(attachment);
+    }
   }
 
   // ─── Input area ────────────────────────────────────────────────────────────
@@ -483,43 +578,46 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.lock_rounded, size: 14, color: AppTheme.textDim),
+                  Icon(Icons.lock_rounded,
+                      size: 14, color: AppTheme.textDim),
                   const SizedBox(width: 6),
-                  Text('This conversation is closed', style: AppTheme.caption),
+                  Text('This conversation is closed',
+                      style: AppTheme.caption),
                 ],
               ),
             )
           : Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-               // Attach button — now wired up
-                 GestureDetector(
-                   onTap: state.isSending ? null : _pickFiles,
-                   child: AnimatedContainer(
-                     duration: const Duration(milliseconds: 200),
-                     width: 44,
-                     height: 44,
-                     decoration: BoxDecoration(
-                       color: state.pendingFiles.isNotEmpty
-                           ? AppTheme.primary.withValues(alpha: 0.12)
-                           : AppTheme.bgElevated,
-                       borderRadius: BorderRadius.circular(12),
-                       border: Border.all(
-                         color: state.pendingFiles.isNotEmpty
-                             ? AppTheme.primary
-                             : AppTheme.border.withValues(alpha: 0.6),
-                         width: state.pendingFiles.isNotEmpty ? 1.5 : 1,
-                       ),
-                     ),
-                     child: Icon(
-                       Icons.attach_file_rounded,
-                       color: state.pendingFiles.isNotEmpty
-                           ? AppTheme.primary
-                           : AppTheme.textDim,
-                       size: 22,
-                     ),
-                   ),
-                 ),
+                // Attach button
+                GestureDetector(
+                  onTap: state.isSending ? null : _pickFiles,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: state.pendingFiles.isNotEmpty
+                          ? AppTheme.primary.withValues(alpha: 0.12)
+                          : AppTheme.bgElevated,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: state.pendingFiles.isNotEmpty
+                            ? AppTheme.primary
+                            : AppTheme.border.withValues(alpha: 0.6),
+                        width: state.pendingFiles.isNotEmpty ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.attach_file_rounded,
+                      color: state.pendingFiles.isNotEmpty
+                          ? AppTheme.primary
+                          : AppTheme.textDim,
+                      size: 22,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
 
                 // Text input
                 Expanded(
@@ -562,11 +660,15 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                       gradient: state.isSending
                           ? null
                           : const LinearGradient(
-                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                              colors: [
+                                Color(0xFF6366F1),
+                                Color(0xFF8B5CF6)
+                              ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                      color: state.isSending ? AppTheme.bgElevated : null,
+                      color:
+                          state.isSending ? AppTheme.bgElevated : null,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: state.isSending
@@ -575,7 +677,8 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: AppTheme.primary),
+                                  strokeWidth: 2,
+                                  color: AppTheme.primary),
                             ),
                           )
                         : const Icon(Icons.send_rounded,
@@ -612,6 +715,27 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   }
 }
 
+// ─── XMPP status dot ──────────────────────────────────────────────────────────
+
+class _XmppStatusDot extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final svc = ref.watch(xmppServiceProvider);
+    final connected = svc.state == XmppState.connected;
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(
+          color: connected ? AppTheme.success : AppTheme.textDim,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Message Bubble ──────────────────────────────────────────────────────────
 
 class _MessageBubble extends StatelessWidget {
@@ -619,11 +743,13 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.showHeader,
     required this.showTime,
+    required this.onOpenAttachment,
   });
 
   final ChatMessage message;
   final bool showHeader;
   final bool showTime;
+  final void Function(ChatMessage, MessageAttachment) onOpenAttachment;
 
   static const List<List<Color>> _senderColors = [
     [Color(0xFFEC4899), Color(0xFFF43F5E)],
@@ -654,7 +780,10 @@ class _MessageBubble extends StatelessWidget {
                 ...message.attachments.map(
                   (a) => Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: _AttachmentCard(attachment: a, isSelf: true),
+                    child: _AttachmentCard(
+                        attachment: a,
+                        isSelf: true,
+                        onTap: () => onOpenAttachment(message, a)),
                   ),
                 ),
               if (message.msg.isNotEmpty)
@@ -753,7 +882,9 @@ class _MessageBubble extends StatelessWidget {
                         (a) => Padding(
                           padding: const EdgeInsets.only(bottom: 4),
                           child: _AttachmentCard(
-                              attachment: a, isSelf: false),
+                              attachment: a,
+                              isSelf: false,
+                              onTap: () => onOpenAttachment(message, a)),
                         ),
                       ),
                     if (message.msg.isNotEmpty)
@@ -786,65 +917,62 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-  // ─── Attachment Card ─────────────────────────────────────────────────────────
+// ─── Attachment Card ──────────────────────────────────────────────────────────
 
-  class _AttachmentCard extends StatelessWidget {
-    const _AttachmentCard({required this.attachment, required this.isSelf});
+class _AttachmentCard extends StatelessWidget {
+  const _AttachmentCard({
+    required this.attachment,
+    required this.isSelf,
+    required this.onTap,
+  });
 
-    final MessageAttachment attachment;
-    final bool isSelf;
+  final MessageAttachment attachment;
+  final bool isSelf;
+  final VoidCallback onTap;
 
-    static const Map<String, List<Color>> _typeColors = {
-      'PDF':  [Color(0xFFEF4444), Color(0x26EF4444), Color(0x4CEF4444)],
-      'DOC':  [Color(0xFF3B82F6), Color(0x263B82F6), Color(0x4C3B82F6)],
-      'DOCX': [Color(0xFF3B82F6), Color(0x263B82F6), Color(0x4C3B82F6)],
-      'XLS':  [Color(0xFF10B981), Color(0x2610B981), Color(0x4C10B981)],
-      'XLSX': [Color(0xFF10B981), Color(0x2610B981), Color(0x4C10B981)],
-      'PNG':  [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
-      'JPG':  [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
-      'JPEG': [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
-      'ZIP':  [Color(0xFF60A5FA), Color(0x2660A5FA), Color(0x4C60A5FA)],
-      'MP4':  [Color(0xFFF59E0B), Color(0x26F59E0B), Color(0x4CF59E0B)],
-      'MP3':  [Color(0xFF06D6A0), Color(0x2606D6A0), Color(0x4C06D6A0)],
-    };
-
-    Future<void> _open() async {
-      final url = attachment.downloadUrl(AppConfig.fileBaseUrl);
-      if (url.isEmpty) return;
-      final uri = Uri.tryParse(url);
-      if (uri != null && await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    }
+  static const Map<String, List<Color>> _typeColors = {
+    'PDF': [Color(0xFFEF4444), Color(0x26EF4444), Color(0x4CEF4444)],
+    'DOC': [Color(0xFF3B82F6), Color(0x263B82F6), Color(0x4C3B82F6)],
+    'DOCX': [Color(0xFF3B82F6), Color(0x263B82F6), Color(0x4C3B82F6)],
+    'XLS': [Color(0xFF10B981), Color(0x2610B981), Color(0x4C10B981)],
+    'XLSX': [Color(0xFF10B981), Color(0x2610B981), Color(0x4C10B981)],
+    'PNG': [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
+    'JPG': [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
+    'JPEG': [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
+    'WEBP': [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
+    'GIF': [Color(0xFFA78BFA), Color(0x26A78BFA), Color(0x4CA78BFA)],
+    'ZIP': [Color(0xFF60A5FA), Color(0x2660A5FA), Color(0x4C60A5FA)],
+    'MP4': [Color(0xFFF59E0B), Color(0x26F59E0B), Color(0x4CF59E0B)],
+    'MP3': [Color(0xFF06D6A0), Color(0x2606D6A0), Color(0x4C06D6A0)],
+  };
 
   @override
   Widget build(BuildContext context) {
     final type = attachment.displayType;
     final colors = _typeColors[type] ??
         [AppTheme.primary, AppTheme.bgElevated, AppTheme.textDim];
-    final (iconColor, iconBg, hoverColor) =
-        (colors[0], colors[1], colors.length > 2 ? colors[2] : colors[0]);
+    final (iconColor, iconBg) = (colors[0], colors[1]);
 
-    // Always use light background with dark text for readability
     const cardBg = AppTheme.bgCard;
     final borderColor = isSelf
         ? AppTheme.primary.withValues(alpha: 0.3)
         : AppTheme.border.withValues(alpha: 0.6);
-    const textColor = AppTheme.textPrimary; // Always dark text
-    const subColor = AppTheme.textDim;
+
+    // For images, show a thumbnail hint via the type label.
+    final isImage = attachment.isImage;
+    final actionIcon = isImage
+        ? Icons.zoom_in_rounded
+        : Icons.download_rounded;
 
     return GestureDetector(
-      onTap: _open,
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: borderColor,
-            width: 1.2,
-          ),
+          border: Border.all(color: borderColor, width: 1.2),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
@@ -856,7 +984,7 @@ class _MessageBubble extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // File type icon container
+            // File type icon
             Container(
               width: 44,
               height: 44,
@@ -864,9 +992,7 @@ class _MessageBubble extends StatelessWidget {
                 color: iconBg,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: iconColor.withValues(alpha: 0.3),
-                  width: 1,
-                ),
+                    color: iconColor.withValues(alpha: 0.3), width: 1),
               ),
               child: Center(
                 child: Text(
@@ -889,7 +1015,7 @@ class _MessageBubble extends StatelessWidget {
                   Text(
                     attachment.originalName,
                     style: AppTheme.bodySmall.copyWith(
-                      color: textColor,
+                      color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -901,19 +1027,15 @@ class _MessageBubble extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(
-                          Icons.insert_drive_file_rounded,
-                          size: 12,
-                          color: subColor,
-                        ),
+                        Icon(Icons.insert_drive_file_rounded,
+                            size: 12, color: AppTheme.textDim),
                         const SizedBox(width: 4),
                         Text(
                           attachment.fileSize!,
                           style: AppTheme.caption.copyWith(
-                            color: subColor,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                          ),
+                              color: AppTheme.textDim,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12),
                         ),
                       ],
                     ),
@@ -922,7 +1044,7 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            // Download / open icon
+            // Action icon (zoom for images, download for docs)
             Container(
               width: 32,
               height: 32,
@@ -939,9 +1061,9 @@ class _MessageBubble extends StatelessWidget {
                 ),
               ),
               child: Icon(
-                Icons.open_in_new_rounded,
+                actionIcon,
                 size: 18,
-                color: isSelf ? AppTheme.primary : subColor,
+                color: isSelf ? AppTheme.primary : AppTheme.textDim,
               ),
             ),
           ],
@@ -949,7 +1071,7 @@ class _MessageBubble extends StatelessWidget {
       ),
     );
   }
-  }
+}
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 

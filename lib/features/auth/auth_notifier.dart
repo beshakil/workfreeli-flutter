@@ -8,6 +8,7 @@ import '../files/files_providers.dart';
 import '../tasks/tasks_providers.dart';
 import '../user/user_providers.dart';
 import '../user/user_service.dart';
+import '../xmpp/xmpp_provider.dart';
 import 'auth_service.dart';
 import 'auth_state.dart';
 import 'device_info_helper.dart';
@@ -29,8 +30,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // Called by GraphQLService after a transparent token refresh succeeds.
   // Persist the new tokens to SecureStorage so a cold restart still works.
+  // XMPP uses a fixed server-side password (not the JWT), so no XMPP sync needed.
   void _onTokensRefreshed(String newToken, String newRefresh) {
-    SecureStorage.saveTokens(newToken, newRefresh); // fire-and-forget
+    SecureStorage.saveTokens(newToken, newRefresh);
   }
 
   // Called by GraphQLService when the server rejects the JWT and a refresh
@@ -179,6 +181,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // nullifies them, so we always re-register after a successful login).
       GraphQLService.setTokens(token, refresh);
       _registerCallbacks();
+      // During logout, session providers are invalidated while HomeScreen is
+      // still mounted, causing immediate refetches with no token that settle
+      // them into error states. Re-invalidate here so they refetch with the
+      // new token when HomeScreen remounts after redirect.
+      // xmppAutoConnectProvider depends on meProvider, but may be in error
+      // state with no active watcher — invalidate it explicitly so XMPP
+      // reconnects after re-login.
+      _ref.invalidate(meProvider);
+      _ref.invalidate(roomsProvider);
+      _ref.invalidate(unreadInitProvider);
+      _ref.invalidate(xmppAutoConnectProvider);
       state = const AuthState.authenticated();
       return;
     }
@@ -213,14 +226,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Full session teardown — safe for multi-company switching.
   ///
   /// Steps:
-  ///   1. Pop all imperative Navigator.push() screens (MessageScreen,
-  ///      TaskDetailScreen) so their autoDispose providers are disposed
-  ///      BEFORE GoRouter's redirect fires. Without this, those screens
-  ///      stay alive and re-query the backend with stale room/task IDs.
-  ///   2. Wipe all tokens from secure storage.
-  ///   3. Clear the in-memory GraphQL bearer token (also clears callbacks).
-  ///   4. Invalidate every non-autoDispose provider that caches session data.
-  ///   5. Flip auth state → unauthenticated → GoRouter redirects to /login.
+  ///   1. Pop all imperative Navigator.push() screens so their autoDispose
+  ///      providers are disposed BEFORE GoRouter's redirect fires.
+  ///   2. Disconnect XMPP WebSocket cleanly.
+  ///   3. Wipe all tokens and cached data from secure storage.
+  ///   4. Clear the in-memory GraphQL bearer token (also clears callbacks).
+  ///   5. Invalidate every non-autoDispose provider that caches session data.
+  ///   6. Reset unread counters.
+  ///   7. Flip auth state → unauthenticated → GoRouter redirects to /login.
   Future<void> logout() async {
     // 1. Pop all imperative Navigator.push() routes back to GoRouter's root.
     try {
@@ -230,21 +243,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ?.popUntil((route) => route.isFirst);
     } catch (_) {}
 
-    // 2. Persist layer
+    // 2. Disconnect XMPP before clearing tokens.
+    XmppService.instance.disconnect();
+
+    // 3. Persist layer — clears all tokens and device state.
     await SecureStorage.clearAll();
 
-    // 3. Network layer — also nullifies onAuthError and onTokensRefreshed.
+    // 4. Network layer — also nullifies onAuthError and onTokensRefreshed.
     GraphQLService.clearToken();
 
-    // 4. Riverpod cache
+    // 5. Riverpod cache — invalidate all session-scoped providers.
     _ref.invalidate(meProvider);
     _ref.invalidate(usersMapProvider);
     _ref.invalidate(tasksNotifierProvider);
-    try { _ref.invalidate(roomsProvider); } catch (_) {}
+    _ref.invalidate(roomsProvider);
+    _ref.invalidate(unreadInitProvider);
     try { _ref.invalidate(filesNotifierProvider); } catch (_) {}
     try { _ref.invalidate(uploadNotifierProvider); } catch (_) {}
 
-    // 5. Auth state → router guard fires → /login
+    // 6. Reset unread counters and XMPP-driven previews so the next login starts clean.
+    _ref.read(unreadCountsProvider.notifier).resetAll();
+    try { _ref.read(roomPreviewNotifierProvider.notifier).clear(); } catch (_) {}
+
+    // 7. Auth state → router guard fires → /login
     state = const AuthState.unauthenticated();
   }
 

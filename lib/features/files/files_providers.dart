@@ -214,6 +214,16 @@ class TagsNotifier extends StateNotifier<TagsListState> {
   }
 
   void clearError() => state = state.copyWith(clearError: true);
+
+  /// Syncs the displayed count for a tag with the actual file count returned
+  /// by the files-by-tag query (pagination.total), overriding the backend's
+  /// use_count which can drift from the real accessible-file count.
+  void updateTagCount(String tagId, int count) {
+    final updated = state.tags.map((t) {
+      return t.tagId == tagId ? t.copyWith(useCount: count) : t;
+    }).toList();
+    state = state.copyWith(tags: updated);
+  }
 }
 
 final tagsNotifierProvider =

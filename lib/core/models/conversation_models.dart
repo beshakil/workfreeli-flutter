@@ -34,6 +34,7 @@ class Room {
   final String? friendId;
   final String? convImg;
   final String? lastMsgTime;
+  final String? lastMsgPreview;
   final String? systemConversation;
   final List<String> participants;
   final String? companyId;
@@ -49,6 +50,7 @@ class Room {
     this.friendId,
     this.convImg,
     this.lastMsgTime,
+    this.lastMsgPreview,
     this.systemConversation,
     this.participants = const [],
     this.companyId,
@@ -76,6 +78,33 @@ class Room {
               .toList() ??
           [],
     );
+
+  Room copyWith({
+    String? title,
+    String? lastMsgPreview,
+    String? lastMsgTime,
+    bool? isMuted,
+    bool? isArchived,
+    bool? isPinned,
+    bool? isClosedFor,
+    List<String>? participants,
+  }) =>
+      Room(
+        id: id,
+        title: title ?? this.title,
+        isGroup: isGroup,
+        isArchived: isArchived ?? this.isArchived,
+        isPinned: isPinned ?? this.isPinned,
+        isMuted: isMuted ?? this.isMuted,
+        isClosedFor: isClosedFor ?? this.isClosedFor,
+        friendId: friendId,
+        convImg: convImg,
+        lastMsgTime: lastMsgTime ?? this.lastMsgTime,
+        lastMsgPreview: lastMsgPreview ?? this.lastMsgPreview,
+        systemConversation: systemConversation,
+        participants: participants ?? this.participants,
+        companyId: companyId,
+      );
 
   bool get isSystemConversation =>
       systemConversation != null &&

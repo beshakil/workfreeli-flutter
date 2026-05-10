@@ -1,14 +1,149 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/models/conversation_models.dart';
 import '../files/files_service.dart';
 import '../user/user_providers.dart';
 import 'conversations_service.dart';
 
-final roomsProvider = FutureProvider.autoDispose<List<Room>>((ref) async {
+export 'conversations_service.dart' show ConversationsService;
+
+// ── Active room tracker ───────────────────────────────────────────────────────
+
+/// Holds the conversation_id of the chat screen currently on-screen.
+/// Set to the room ID when MessageScreen opens; cleared on dispose.
+/// Used by the unread-counter logic to skip incrementing the open room.
+final activeRoomIdProvider = StateProvider<String?>((ref) => null);
+
+// ── Unread counters ───────────────────────────────────────────────────────────
+
+class UnreadCountsNotifier extends StateNotifier<Map<String, int>> {
+  UnreadCountsNotifier() : super({});
+
+  void increment(String conversationId) {
+    state = {...state, conversationId: (state[conversationId] ?? 0) + 1};
+  }
+
+  void reset(String conversationId) {
+    if (!state.containsKey(conversationId)) return;
+    final updated = Map<String, int>.from(state)..remove(conversationId);
+    state = updated;
+  }
+
+  void resetAll() => state = {};
+
+  /// Seed the counter map from the backend's total_unread response.
+  /// Backend values are authoritative — they override any locally-incremented counts.
+  void initFromBackend(Map<String, int> counts) {
+    state = {...state, ...counts};
+  }
+
+  /// Decrement a conversation's unread count (e.g. from read_status_msg XMPP event).
+  void decrement(String conversationId, int by) {
+    final current = state[conversationId] ?? 0;
+    final updated = (current - by).clamp(0, 99999);
+    if (updated <= 0) {
+      final next = Map<String, int>.from(state)..remove(conversationId);
+      state = next;
+    } else {
+      state = {...state, conversationId: updated};
+    }
+  }
+
+  int countFor(String conversationId) => state[conversationId] ?? 0;
+
+  int get totalUnread => state.values.fold(0, (a, b) => a + b);
+}
+
+/// Per-conversation unread message counts, driven by XMPP new_message events.
+final unreadCountsProvider =
+    StateNotifierProvider<UnreadCountsNotifier, Map<String, int>>(
+        (_) => UnreadCountsNotifier());
+
+/// Derived: total unread across all conversations.
+final totalUnreadProvider = Provider<int>((ref) {
+  return ref.watch(unreadCountsProvider.notifier).totalUnread;
+});
+
+// ── Backend unread count initialiser ─────────────────────────────────────────
+
+/// Fetches the server's total_unread on login and seeds UnreadCountsNotifier.
+/// Not autoDispose — cached for the session. Invalidated by logout.
+final unreadInitProvider = FutureProvider<void>((ref) async {
+  try {
+    final counts = await ConversationsService.getTotalUnread();
+    ref.read(unreadCountsProvider.notifier).initFromBackend(counts);
+  } catch (_) {
+    // Non-fatal — local XMPP-driven counts still work.
+  }
+});
+
+// ── Rooms ─────────────────────────────────────────────────────────────────────
+
+// Not autoDispose — stays alive across tab switches so the list is not
+// re-fetched every time the user leaves and returns to the Messages tab.
+// Invalidated explicitly by logout and by invalidate(roomsProvider) on
+// new_room / update_room XMPP events.
+final roomsProvider = FutureProvider<List<Room>>((ref) async {
   final user = await ref.watch(meProvider.future);
   return ConversationsService.getRooms(user.id);
+});
+
+// ── Per-room XMPP-driven last-message preview ─────────────────────────────────
+
+class RoomPreviewNotifier
+    extends StateNotifier<Map<String, ({String preview, String time})>> {
+  RoomPreviewNotifier() : super({});
+
+  void update({
+    required String convId,
+    required String senderName,
+    required String preview,
+    required String time,
+  }) {
+    final full =
+        senderName.isNotEmpty ? '$senderName: $preview' : preview;
+    final truncated =
+        full.length > 80 ? '${full.substring(0, 80)}…' : full;
+    state = {
+      ...state,
+      convId: (preview: truncated, time: time),
+    };
+  }
+
+  void clear() => state = {};
+}
+
+final roomPreviewNotifierProvider = StateNotifierProvider<RoomPreviewNotifier,
+    Map<String, ({String preview, String time})>>(
+  (_) => RoomPreviewNotifier(),
+);
+
+/// Merges server rooms with XMPP-driven previews and re-sorts.
+/// Pinned rooms stay first; others are ordered by most-recent message time.
+/// Not autoDispose — mirrors roomsProvider lifetime.
+final sortedRoomsProvider =
+    Provider<AsyncValue<List<Room>>>((ref) {
+  final roomsAsync = ref.watch(roomsProvider);
+  final previews = ref.watch(roomPreviewNotifierProvider);
+  if (previews.isEmpty) return roomsAsync;
+
+  return roomsAsync.whenData((rooms) {
+    final merged = rooms.map((r) {
+      final p = previews[r.id];
+      if (p == null) return r;
+      return r.copyWith(lastMsgPreview: p.preview, lastMsgTime: p.time);
+    }).toList();
+
+    merged.sort((a, b) {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return (b.lastMsgTime ?? '').compareTo(a.lastMsgTime ?? '');
+    });
+    return merged;
+  });
 });
 
 // ── Messages state ────────────────────────────────────────────────────────────
@@ -20,6 +155,7 @@ class MessagesState {
   final bool hasMore;
   final int currentPage;
   final String? error;
+
   /// Files selected by the user waiting to be sent with the next message.
   final List<File> pendingFiles;
 
@@ -55,8 +191,6 @@ class MessagesState {
 }
 
 // ── Notifier args ─────────────────────────────────────────────────────────────
-// participantsJoined is a comma-separated string so it is value-comparable
-// and avoids runtime equality issues that Lists would cause on the record key.
 
 typedef MsgArgs = ({
   String roomId,
@@ -128,7 +262,53 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   void clearError() => state = state.copyWith(clearError: true);
 
-  // ── Pending file management ─────────────────────────────────────────────────
+  // ── Real-time XMPP injection ──────────────────────────────────────────────
+
+  /// Injects a message received via XMPP without an API round-trip.
+  /// Deduplicates by msg_id so a rapid refresh + XMPP event don't duplicate.
+  void addRealTimeMessage(ChatMessage msg) {
+    if (state.messages.any((m) => m.id == msg.id)) return;
+    state = state.copyWith(messages: [msg, ...state.messages]);
+  }
+
+  /// Tries to build a [ChatMessage] from a raw XMPP new_message payload.
+  /// Returns null if the payload is malformed or belongs to a different room.
+  static ChatMessage? parseXmppMessage(
+    Map<String, dynamic> data,
+    String selfId,
+    String roomId,
+  ) {
+    try {
+      final convId = data['conversation_id']?.toString() ??
+          data['conv_id']?.toString() ?? '';
+      if (convId.isNotEmpty && convId != roomId) return null;
+
+      // Decrypt body field — EncryptionService.decrypt is called inside
+      // ChatMessage.fromJson, so we just forward rawBody as-is.
+      final rawBody = data['msg_body']?.toString() ?? '';
+
+      // Build a ChatMessage-compatible JSON map from the XMPP payload.
+      final msgMap = <String, dynamic>{
+        'msg_id': data['msg_id'] ?? data['_id'] ?? '',
+        'msg_body': rawBody,
+        'msg_type': data['msg_type'] ?? 'text',
+        'sender': data['sender'] ?? data['user_id'] ?? '',
+        'sendername': data['sendername'] ?? data['sender_name'] ?? '',
+        'senderimg': data['senderimg'] ?? data['sender_img'],
+        'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
+        'all_attachment': data['all_attachment'] ?? [],
+      };
+
+      if ((msgMap['msg_id'] as String).isEmpty) return null;
+
+      return ChatMessage.fromJson(msgMap, selfId: selfId);
+    } catch (e) {
+      debugPrint('[MessagesNotifier] parseXmppMessage error: $e');
+      return null;
+    }
+  }
+
+  // ── Pending file management ───────────────────────────────────────────────
 
   void addPendingFile(File file) =>
       state = state.copyWith(pendingFiles: [...state.pendingFiles, file]);
@@ -140,22 +320,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   void clearPendingFiles() => state = state.copyWith(pendingFiles: []);
 
-  // ── Send message ────────────────────────────────────────────────────────────
+  // ── Send message ──────────────────────────────────────────────────────────
 
   /// Sends [text] with any [pendingFiles] attached.
   ///
   /// Flow:
   ///   1. Upload each pending file via REST → get raw file-info maps.
   ///   2. Send GraphQL mutation with text + attach_files payload.
-  ///   3. Prepend returned message to the local list (optimistic-style).
+  ///   3. Prepend returned message to the local list.
   ///
-  /// On error the pending files are restored so the user can retry.
+  /// On error, pending files are restored so the user can retry.
   Future<void> sendMessage(String text) async {
     final trimmed = text.trim();
     final filesToSend = List<File>.from(state.pendingFiles);
     if (trimmed.isEmpty && filesToSend.isEmpty) return;
 
-    // Clear pending files immediately so the UI reflects the "sending" state
     state = state.copyWith(
       isSending: true,
       clearError: true,
@@ -163,7 +342,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     );
 
     try {
-      // 1. Upload each file and collect the raw info maps for attach_files
       final uploadedFiles = <Map<String, dynamic>>[];
       for (final file in filesToSend) {
         if (_userEmail.isNotEmpty) {
@@ -175,7 +353,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         }
       }
 
-      // 2. Send the message (with or without attachments)
       final msg = await ConversationsService.sendMessage(
         _roomId,
         trimmed,
@@ -185,12 +362,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         attachFiles: uploadedFiles,
       );
 
+      // Guard: XMPP echo may have already prepended this message while the
+      // mutation was in-flight. Deduplicate so the message never appears twice.
+      final alreadyPresent = state.messages.any((m) => m.id == msg.id);
       state = state.copyWith(
-        messages: [msg, ...state.messages],
+        messages: alreadyPresent ? state.messages : [msg, ...state.messages],
         isSending: false,
       );
     } catch (e) {
-      // Restore pending files so the user can retry without re-selecting
       state = state.copyWith(
         isSending: false,
         error: e.toString().replaceFirst('Exception: ', ''),
@@ -200,11 +379,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 }
 
+// ── Provider ──────────────────────────────────────────────────────────────────
+
 final messagesProvider = StateNotifierProvider.autoDispose
     .family<MessagesNotifier, MessagesState, MsgArgs>(
   (ref, args) {
-    // Split the pre-joined participants string — avoids a roomsProvider read
-    // which can be null (async) and would silently produce an empty list.
     final participants = args.participantsJoined.isEmpty
         ? const <String>[]
         : args.participantsJoined.split(',');

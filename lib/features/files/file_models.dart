@@ -37,6 +37,18 @@ class TagDetails {
     this.createdAt,
   });
 
+  TagDetails copyWith({int? useCount}) => TagDetails(
+        tagId: tagId,
+        title: title,
+        tagColor: tagColor,
+        tagType: tagType,
+        taggedBy: taggedBy,
+        useCount: useCount ?? this.useCount,
+        favourite: favourite,
+        teamList: teamList,
+        createdAt: createdAt,
+      );
+
   factory TagDetails.fromJson(Map<String, dynamic> json) => TagDetails(
         tagId: json['tag_id'] as String? ?? json['_id'] as String? ?? '',
         title: json['title'] as String? ?? '',

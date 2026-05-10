@@ -18,9 +18,8 @@ import '../theme/app_theme.dart';
 // ── Filter chip definitions ───────────────────────────────────────────────────
 
 class _Filter {
-  final String
-      key; // backend value ('all', 'image', 'video', 'audio', 'voice', 'docs')
-  final String label; // display label
+  final String key;
+  final String label;
   final IconData icon;
   const _Filter(this.key, this.label, this.icon);
 }
@@ -61,15 +60,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
 
     switch (_tabController.index) {
       case 0:
-        // Files tab
         ref.read(filesNotifierProvider.notifier).setTab('files');
         break;
       case 1:
-        // Links tab - trigger reload of links
         ref.read(linksNotifierProvider.notifier).load();
         break;
       case 2:
-        // Tags tab - already loads in initState of _TagsTab
         break;
     }
   }
@@ -82,8 +78,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
     _searchController.dispose();
     super.dispose();
   }
-
-  // ── Upload ──────────────────────────────────────────────────────────────────
 
   Future<void> _pickAndUpload() async {
     final result = await FilePicker.platform.pickFiles(
@@ -111,8 +105,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
         : _snack(ref.read(uploadNotifierProvider).error ?? 'Upload failed.',
             isError: true);
   }
-
-  // ── Download ────────────────────────────────────────────────────────────────
 
   Future<void> _openFile(SharedFile file) async {
     final url = file.downloadUrl(AppConfig.fileBaseUrl);
@@ -143,15 +135,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
 
   void _snack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content:
-          Text(msg, style: AppTheme.bodySmall.copyWith(color: Colors.white)),
+      content: Text(msg, style: AppTheme.bodySmall.copyWith(color: Colors.white)),
       backgroundColor: isError ? AppTheme.danger : AppTheme.success,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 3),
     ));
   }
-
-  // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -185,8 +174,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
     );
   }
 
-  // ── Header ──────────────────────────────────────────────────────────────────
-
   Widget _buildHeader(BuildContext context) {
     final listState = ref.watch(filesNotifierProvider);
 
@@ -194,7 +181,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
       padding: EdgeInsets.only(
         top: MediaQuery.of(context).padding.top + 8,
         left: 20,
-        right: 12,
+        right: 20, // Changed from 12 to 20 for consistency
         bottom: 12,
       ),
       decoration: BoxDecoration(
@@ -211,10 +198,8 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
               Text('FileHub', style: AppTheme.headingMedium),
               const SizedBox(width: 6),
               Text('| Files',
-                  style:
-                      AppTheme.bodyMedium.copyWith(color: AppTheme.textMuted)),
+                  style: AppTheme.bodyMedium.copyWith(color: AppTheme.textMuted)),
               const Spacer(),
-              // Refresh
               GestureDetector(
                 onTap: listState.isLoading
                     ? null
@@ -240,7 +225,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
             ],
           ),
           const SizedBox(height: 10),
-          // Search bar
           Container(
             height: 38,
             decoration: BoxDecoration(
@@ -291,8 +275,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
     );
   }
 
-  // ── Tab bar ─────────────────────────────────────────────────────────────────
-
   Widget _buildTabBar() {
     return Container(
       color: AppTheme.bgCard,
@@ -312,8 +294,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
       ),
     );
   }
-
-  // ── Upload progress bar ─────────────────────────────────────────────────────
 
   Widget _buildUploadBar(double progress) {
     return Container(
@@ -351,7 +331,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen>
   }
 }
 
-// ── Files / Links tab content ─────────────────────────────────────────────────
+// ── Files tab content ─────────────────────────────────────────────────
 
 class _FilesTab extends ConsumerStatefulWidget {
   const _FilesTab({required this.searchQuery, required this.onOpen});
@@ -396,7 +376,6 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
 
     return Column(
       children: [
-        // ── Filter chips ──────────────────────────────────────────────────
         SizedBox(
           height: 44,
           child: ListView.separated(
@@ -418,8 +397,6 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
             },
           ),
         ),
-
-        // ── File list ─────────────────────────────────────────────────────
         Expanded(
           child: listState.isLoading && listState.files.isEmpty
               ? _buildSkeleton()
@@ -496,7 +473,6 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
         separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.border),
         itemBuilder: (ctx, i) {
           if (i == filtered.length) {
-            // Load more indicator at bottom
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Center(
@@ -641,8 +617,8 @@ class _FileRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // File icon
                 Container(
                   width: 40,
                   height: 40,
@@ -670,8 +646,6 @@ class _FileRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-
-                // Name + meta
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -685,22 +659,12 @@ class _FileRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 3),
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
                         children: [
-                          if (file.fileSize != null &&
-                              file.fileSize!.isNotEmpty) ...[
+                          if (file.fileSize != null && file.fileSize!.isNotEmpty)
                             Text(file.fileSize!, style: AppTheme.caption),
-                            const SizedBox(width: 6),
-                            Container(
-                              width: 3,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: AppTheme.textDim,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
                           if (file.formattedDate.isNotEmpty)
                             Text(
                               file.formattedTimePart.isNotEmpty
@@ -708,43 +672,30 @@ class _FileRow extends StatelessWidget {
                                   : file.formattedDate,
                               style: AppTheme.caption,
                             ),
-                          // Show link indicator if it's a shared link
                           if (file.referenceId != null &&
-                              file.referenceId!.isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              width: 3,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: AppTheme.textDim,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
+                              file.referenceId!.isNotEmpty)
                             const Icon(Icons.link_rounded,
                                 size: 12, color: AppTheme.textDim),
-                          ],
                         ],
                       ),
-                      if (file.uploadedBy != null &&
-                          file.uploadedBy!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          file.uploadedBy!,
-                          style: AppTheme.caption
-                              .copyWith(color: AppTheme.textDim),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      if (file.uploadedBy != null && file.uploadedBy!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            file.uploadedBy!,
+                            style: AppTheme.caption
+                                .copyWith(color: AppTheme.textDim),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ],
-                      // Tags
                       if (file.tags.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Wrap(
                           spacing: 6,
                           runSpacing: 4,
                           children: file.tags
-                              .take(3) // Show max 3 tags to avoid clutter
+                              .take(3)
                               .map((tag) => Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 6, vertical: 2),
@@ -779,7 +730,7 @@ class _FileRow extends StatelessWidget {
                         ),
                         if (file.tags.length > 3)
                           Padding(
-                            padding: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.only(top: 4),
                             child: Text(
                               '+${file.tags.length - 3} more',
                               style: AppTheme.caption.copyWith(
@@ -792,10 +743,7 @@ class _FileRow extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // Star
                 GestureDetector(
                   onTap: onStar,
                   behavior: HitTestBehavior.opaque,
@@ -812,20 +760,16 @@ class _FileRow extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                // Download icon / Link indicator
                 Padding(
                   padding: const EdgeInsets.only(left: 2),
-                  child:
-                      file.referenceId != null && file.referenceId!.isNotEmpty
-                          ? Icon(Icons.link_rounded,
-                              size: 18, color: AppTheme.textDim)
-                          : Icon(Icons.download_rounded,
-                              size: 18, color: AppTheme.textDim),
+                  child: file.referenceId != null && file.referenceId!.isNotEmpty
+                      ? Icon(Icons.link_rounded,
+                          size: 18, color: AppTheme.textDim)
+                      : Icon(Icons.download_rounded,
+                          size: 18, color: AppTheme.textDim),
                 ),
               ],
             ),
-            // Link info for links tab
             if (file.referenceId != null && file.referenceId!.isNotEmpty) ...[
               const SizedBox(height: 4),
               Padding(
@@ -928,17 +872,25 @@ class _TagsTab extends ConsumerStatefulWidget {
 }
 
 class _TagsTabState extends ConsumerState<_TagsTab> {
+  TagDetails? _selectedTag;
+
   @override
   void initState() {
     super.initState();
-    // Load tags when tab is first shown
     Future.microtask(() {
       ref.read(tagsNotifierProvider.notifier).load();
     });
   }
 
+  void _selectTag(TagDetails tag) => setState(() => _selectedTag = tag);
+  void _clearTag() => setState(() => _selectedTag = null);
+
   @override
   Widget build(BuildContext context) {
+    if (_selectedTag != null) {
+      return _TagFilesView(tag: _selectedTag!, onBack: _clearTag);
+    }
+
     final tagsState = ref.watch(tagsNotifierProvider);
 
     return RefreshIndicator(
@@ -975,16 +927,12 @@ class _TagsTabState extends ConsumerState<_TagsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    height: 14,
-                    width: double.infinity,
-                    color: AppTheme.bgElevated,
-                  ),
+                      height: 14,
+                      width: double.infinity,
+                      color: AppTheme.bgElevated),
                   const SizedBox(height: 6),
                   Container(
-                    height: 11,
-                    width: 80,
-                    color: AppTheme.bgElevated,
-                  ),
+                      height: 11, width: 80, color: AppTheme.bgElevated),
                 ],
               ),
             ),
@@ -1005,16 +953,19 @@ class _TagsTabState extends ConsumerState<_TagsTab> {
                 size: 48, color: AppTheme.textDim),
             const SizedBox(height: 14),
             Text('Could not load tags',
-                style:
-                    AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                style: AppTheme.bodyMedium
+                    .copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Text(message, style: AppTheme.caption, textAlign: TextAlign.center),
+            Text(message,
+                style: AppTheme.caption, textAlign: TextAlign.center),
             const SizedBox(height: 20),
             TextButton.icon(
-              onPressed: () => ref.read(tagsNotifierProvider.notifier).load(),
+              onPressed: () =>
+                  ref.read(tagsNotifierProvider.notifier).load(),
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Retry'),
-              style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
+              style:
+                  TextButton.styleFrom(foregroundColor: AppTheme.primary),
             ),
           ],
         ),
@@ -1028,13 +979,15 @@ class _TagsTabState extends ConsumerState<_TagsTab> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.label_rounded, size: 52, color: AppTheme.textDim),
+            const Icon(Icons.label_rounded,
+                size: 52, color: AppTheme.textDim),
             const SizedBox(height: 14),
             Text('No tags yet',
-                style:
-                    AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                style: AppTheme.bodyMedium
+                    .copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
-            Text('Create tags to organize your files', style: AppTheme.caption),
+            Text('Create tags to organize your files',
+                style: AppTheme.caption),
           ],
         ),
       );
@@ -1047,77 +1000,490 @@ class _TagsTabState extends ConsumerState<_TagsTab> {
       separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.border),
       itemBuilder: (ctx, i) {
         final tag = tags[i];
-        final color = tag.tagColor != null
-            ? Color(int.parse('0xFF${tag.tagColor!.substring(1)}'))
-            : AppTheme.primary;
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            children: [
-              // Tag color indicator
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: color,
-                    width: 1.5,
-                  ),
-                ),
-                child: Center(
-                  child: Icon(Icons.label_rounded, color: color, size: 20),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Tag info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tag.title,
-                      style: AppTheme.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    if (tag.useCount != null)
-                      Text(
-                        '${tag.useCount} files',
-                        style: AppTheme.caption,
-                      ),
-                  ],
-                ),
-              ),
-
-              // Tag type badge (if private/public)
-              if (tag.tagType != null) ...[
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgElevated,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    tag.tagType == 'public' ? 'Public' : 'Private',
-                    style: AppTheme.caption.copyWith(
-                      fontSize: 10,
-                      color: AppTheme.textDim,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+        final color = _tagColor(tag);
+        return _TagRow(
+          tag: tag,
+          color: color,
+          onTap: () => _selectTag(tag),
         );
       },
     );
   }
+}
+
+// ── Tag row ───────────────────────────────────────────────────────────────────
+
+class _TagRow extends StatelessWidget {
+  const _TagRow({
+    required this.tag,
+    required this.color,
+    required this.onTap,
+  });
+
+  final TagDetails tag;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: color, width: 1.5),
+              ),
+              child: Center(
+                child: Icon(Icons.label_rounded, color: color, size: 20),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tag.title,
+                      style: AppTheme.bodySmall
+                          .copyWith(fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 3),
+                  if (tag.useCount != null)
+                    Text('${tag.useCount} files',
+                        style: AppTheme.caption),
+                ],
+              ),
+            ),
+            if (tag.tagType != null) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgElevated,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  tag.tagType == 'public' ? 'Public' : 'Private',
+                  style: AppTheme.caption
+                      .copyWith(fontSize: 10, color: AppTheme.textDim),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            const Icon(Icons.chevron_right_rounded,
+                color: AppTheme.textDim, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Tag-filtered files view ───────────────────────────────────────────────────
+
+class _TagFilesView extends ConsumerStatefulWidget {
+  const _TagFilesView({required this.tag, required this.onBack});
+
+  final TagDetails tag;
+  final VoidCallback onBack;
+
+  @override
+  ConsumerState<_TagFilesView> createState() => _TagFilesViewState();
+}
+
+class _TagFilesViewState extends ConsumerState<_TagFilesView> {
+  final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+
+  List<SharedFile> _files = [];
+  bool _loading = true;
+  bool _loadingMore = false;
+  String? _error;
+  int _page = 1;
+  int _totalCount = 0;
+  bool _hasMore = true;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+    _loadFiles(reset: true);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _scrollCtrl
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >=
+            _scrollCtrl.position.maxScrollExtent * 0.8 &&
+        !_loadingMore &&
+        _hasMore) {
+      _loadFiles(reset: false);
+    }
+  }
+
+  Future<void> _loadFiles({required bool reset}) async {
+    if (reset) {
+      setState(() {
+        _loading = true;
+        _error = null;
+        _page = 1;
+        _hasMore = true;
+      });
+    } else {
+      if (_loadingMore || !_hasMore) return;
+      setState(() => _loadingMore = true);
+    }
+
+    try {
+      final result = await FilesService.getFilesByTag(
+        tagId: widget.tag.tagId,
+        page: reset ? 1 : _page + 1,
+      );
+
+      setState(() {
+        if (reset) {
+          _files = result.files;
+        } else {
+          _files = [..._files, ...result.files];
+          _page++;
+        }
+        _totalCount = result.pagination.total;
+        _hasMore = result.pagination.hasMore;
+        _loading = false;
+        _loadingMore = false;
+      });
+      // Sync tag list count with the authoritative pagination total so the
+      // tag row shows the correct file count when the user navigates back.
+      if (reset) {
+        ref
+            .read(tagsNotifierProvider.notifier)
+            .updateTagCount(widget.tag.tagId, result.pagination.total);
+      }
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _loadingMore = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  List<SharedFile> get _filtered {
+    if (_searchQuery.isEmpty) return _files;
+    final q = _searchQuery.toLowerCase();
+    return _files.where((f) {
+      return f.originalName.toLowerCase().contains(q) ||
+          (f.uploadedBy?.toLowerCase().contains(q) ?? false);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tagColor = _tagColor(widget.tag);
+
+    return Column(
+      children: [
+        Container(
+          color: AppTheme.bgCard,
+          padding: const EdgeInsets.fromLTRB(8, 10, 16, 10),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: widget.onBack,
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                        size: 18, color: AppTheme.textMuted),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                        minWidth: 36, minHeight: 36),
+                  ),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: tagColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: tagColor, width: 1.2),
+                    ),
+                    child: Center(
+                      child: Icon(Icons.label_rounded,
+                          color: tagColor, size: 15),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.tag.title,
+                            style: AppTheme.bodySmall.copyWith(
+                                fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        if (!_loading)
+                          Text(
+                            '$_totalCount file${_totalCount == 1 ? '' : 's'}',
+                            style: AppTheme.caption,
+                          ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _loading
+                        ? null
+                        : () => _loadFiles(reset: true),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgElevated,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: _loading
+                          ? const Padding(
+                              padding: EdgeInsets.all(7),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppTheme.primary),
+                            )
+                          : const Icon(Icons.refresh_rounded,
+                              color: AppTheme.textMuted, size: 16),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.bgElevated,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Row(
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Icon(Icons.search_rounded,
+                          color: AppTheme.textDim, size: 17),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchCtrl,
+                        style: AppTheme.bodySmall,
+                        onChanged: (v) =>
+                            setState(() => _searchQuery = v.toLowerCase()),
+                        decoration: InputDecoration(
+                          hintText: 'Search in tag…',
+                          hintStyle: AppTheme.bodySmall
+                              .copyWith(color: AppTheme.textDim),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                    if (_searchQuery.isNotEmpty)
+                      GestureDetector(
+                        onTap: () {
+                          _searchCtrl.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: Icon(Icons.close_rounded,
+                              color: AppTheme.textDim, size: 15),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: AppTheme.border),
+        Expanded(child: _buildBody()),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading && _files.isEmpty) return _buildSkeleton();
+
+    if (_error != null && _files.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.folder_off_rounded,
+                  size: 48, color: AppTheme.textDim),
+              const SizedBox(height: 14),
+              Text('Could not load files',
+                  style: AppTheme.bodyMedium
+                      .copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(_error!, style: AppTheme.caption,
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              TextButton.icon(
+                onPressed: () => _loadFiles(reset: true),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
+                style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.primary),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final filtered = _filtered;
+
+    if (filtered.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.folder_open_rounded,
+                size: 52, color: AppTheme.textDim),
+            const SizedBox(height: 14),
+            Text(
+              _searchQuery.isEmpty
+                  ? 'No files with this tag'
+                  : 'No results for "$_searchQuery"',
+              style: AppTheme.bodyMedium
+                  .copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _searchQuery.isEmpty
+                  ? 'Files tagged with "${widget.tag.title}" appear here'
+                  : 'Try a different search term',
+              style: AppTheme.caption,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _loadFiles(reset: true),
+      color: AppTheme.primary,
+      backgroundColor: AppTheme.bgCard,
+      child: ListView.separated(
+        controller: _scrollCtrl,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+        itemCount: filtered.length + (_hasMore ? 1 : 0),
+        separatorBuilder: (_, __) =>
+            Divider(height: 1, color: AppTheme.border),
+        itemBuilder: (ctx, i) {
+          if (i == filtered.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: _loadingMore
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.primary,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            );
+          }
+          return _FileRow(
+            file: filtered[i],
+            onTap: () => _openFile(context, filtered[i]),
+            onStar: () {},
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSkeleton() {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: 8,
+      itemBuilder: (_, __) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.bgElevated,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                      height: 13,
+                      width: double.infinity,
+                      color: AppTheme.bgElevated),
+                  const SizedBox(height: 6),
+                  Container(
+                      height: 11, width: 120, color: AppTheme.bgElevated),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFile(BuildContext context, SharedFile file) async {
+    final url = file.downloadUrl(AppConfig.fileBaseUrl);
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No URL available.')),
+      );
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+}
+
+// ── Shared helper ─────────────────────────────────────────────────────────────
+
+Color _tagColor(TagDetails tag) {
+  if (tag.tagColor == null || tag.tagColor!.isEmpty) return AppTheme.primary;
+  final hex = tag.tagColor!.replaceAll('#', '');
+  if (hex.length != 6) return AppTheme.primary;
+  return Color(int.parse('0xFF$hex'));
 }
 
 // ── Upload FAB ────────────────────────────────────────────────────────────────
@@ -1280,7 +1646,7 @@ class _LinksTabState extends ConsumerState<_LinksTab> {
                     AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(message, style: AppTheme.caption, textAlign: TextAlign.center),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
             TextButton.icon(
               onPressed: () => ref.read(linksNotifierProvider.notifier).load(),
               icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -1368,17 +1734,18 @@ class _LinkRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
-            // Link icon - no background, just icon
             Container(
               width: 40,
               height: 40,
-              alignment: Alignment.center,
-              child: const Icon(Icons.link_rounded,
-                  color: AppTheme.textDim, size: 20),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Center(
+                child: Icon(Icons.link_rounded, color: AppTheme.primary, size: 20),
+              ),
             ),
             const SizedBox(width: 12),
-
-            // Link info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1400,20 +1767,10 @@ class _LinkRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    link.uploadedBy ?? 'Unknown',
-                    style: AppTheme.caption.copyWith(color: AppTheme.textDim),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
                 ],
               ),
             ),
-
             const SizedBox(width: 8),
-
-            // External link icon
             const Padding(
               padding: EdgeInsets.only(left: 2),
               child: Icon(Icons.open_in_new_rounded,

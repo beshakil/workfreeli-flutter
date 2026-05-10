@@ -156,7 +156,7 @@ List<ChannelModel> sampleChannels = [
     name: 'Alex Chen',
     subtitle: 'Online',
     icon: 'AC',
-    iconGradient: AppTheme.avatarPurple,
+    iconGradient: AppTheme.avatarIndigo,
     lastMessage: 'The API docs are updated',
     time: '5h',
     isDM: true,
@@ -185,7 +185,7 @@ List<MessageModel> sampleMessages = [
     sender: 'Alex Chen',
     text: "Agreed with Mike. Also, the API documentation has been updated — all v2 endpoints are now live. Let me know if anything breaks.",
     time: '10:15 AM',
-    avatarGradient: AppTheme.avatarPurple,
+    avatarGradient: AppTheme.avatarIndigo,
     avatarText: 'AC',
   ),
   MessageModel(
@@ -228,7 +228,7 @@ List<List<TaskModel>> sampleTasks = [
         TaskTag(label: 'Bug', bgColor: AppTheme.danger.withValues(alpha: 0.15), textColor: AppTheme.danger),
         TaskTag(label: 'Urgent', bgColor: AppTheme.warning.withValues(alpha: 0.15), textColor: AppTheme.warning),
       ],
-      assignees: [TaskAssignee(initials: 'AC', gradient: AppTheme.avatarPurple)],
+      assignees: [TaskAssignee(initials: 'AC', gradient: AppTheme.avatarIndigo)],
       dueDate: 'Apr 22',
     ),
     TaskModel(
@@ -245,7 +245,7 @@ List<List<TaskModel>> sampleTasks = [
       tags: [TaskTag(label: 'Feature', bgColor: AppTheme.primaryLight.withValues(alpha: 0.15), textColor: AppTheme.primaryLight)],
       assignees: [
         TaskAssignee(initials: 'FR', gradient: AppTheme.avatarIndigo),
-        TaskAssignee(initials: 'AC', gradient: AppTheme.avatarPurple),
+        TaskAssignee(initials: 'AC', gradient: AppTheme.avatarIndigo),
       ],
       dueDate: 'Apr 24',
     ),
@@ -262,7 +262,7 @@ List<List<TaskModel>> sampleTasks = [
       title: 'Push notification scheduling system',
       tags: [TaskTag(label: 'Feature', bgColor: AppTheme.primaryLight.withValues(alpha: 0.15), textColor: AppTheme.primaryLight)],
       assignees: [
-        TaskAssignee(initials: 'AC', gradient: AppTheme.avatarPurple),
+        TaskAssignee(initials: 'AC', gradient: AppTheme.avatarIndigo),
         TaskAssignee(initials: 'FR', gradient: AppTheme.avatarIndigo),
       ],
       dueDate: 'Apr 21',
@@ -280,7 +280,7 @@ List<List<TaskModel>> sampleTasks = [
     TaskModel(
       title: 'OAuth2 integration for SSO login',
       tags: [TaskTag(label: 'Feature', bgColor: AppTheme.primaryLight.withValues(alpha: 0.15), textColor: AppTheme.primaryLight)],
-      assignees: [TaskAssignee(initials: 'AC', gradient: AppTheme.avatarPurple)],
+      assignees: [TaskAssignee(initials: 'AC', gradient: AppTheme.avatarIndigo)],
       dueDate: 'Done',
       isDone: true,
     ),

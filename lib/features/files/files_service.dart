@@ -7,7 +7,7 @@ import '../../core/network/graphql_client.dart';
 import '../../core/storage/secure_storage.dart';
 import 'file_models.dart';
 
-// ── GraphQL query ─────────────────────────────────────────────────────────────
+// ── GraphQL queries ───────────────────────────────────────────────────────────
 
 const _getFilesQuery = '''
 query GetFileGallery(
@@ -15,12 +15,14 @@ query GetFileGallery(
   \$tab: String
   \$conversation_id: String
   \$file_type: String
+  \$file_sub_type: String
 ) {
   get_file_gallery(
     page: \$page
     tab: \$tab
     conversation_id: \$conversation_id
     file_type: \$file_type
+    file_sub_type: \$file_sub_type
   ) {
     files {
       id
@@ -130,7 +132,7 @@ class FilesService {
         // 'all_files' → files from every conversation the user belongs to
         'conversation_id': conversationId ?? 'all_files',
         if (fileType != null && fileType != 'all') 'file_type': fileType,
-        if (fileSubType != null) 'file_sub_type': fileSubType,
+        'file_sub_type': fileSubType ?? '',
       },
     );
 
@@ -186,7 +188,7 @@ query GetFileGallery(
     final data = await GraphQLService.call(
       getTagsQuery,
       variables: {
-        'conversation_id': conversationId ?? '',
+        'conversation_id': conversationId ?? 'all_files',
         'file_type': 'all',
         'file_sub_type': '',
         'tag_id': ['all'],
@@ -296,6 +298,96 @@ query GetFileGallery(
           : int.tryParse('${raw['size']}') ?? 0,
       'location': raw['location'] ?? '',
     };
+  }
+
+  // ── Files by tag ──────────────────────────────────────────────────────────
+
+  /// Fetches files that are tagged with [tagId].
+  /// Uses `tab: "tag_file"` and `conversation_id: "all_files"` to match
+  /// the React web client's tag-filter behaviour.
+  static Future<FilesResult> getFilesByTag({
+    required String tagId,
+    int page = 1,
+    String? fileType,
+  }) async {
+    const query = '''
+query GetFilesByTag(
+  \$page: Int
+  \$tag_id: [String!]
+  \$file_type: String
+) {
+  get_file_gallery(
+    page: \$page
+    tab: "tag_file"
+    conversation_id: "all_files"
+    file_sub_type: "tag"
+    tag_id: \$tag_id
+    file_type: \$file_type
+  ) {
+    files {
+      id
+      conversation_id
+      conversation_title
+      uploaded_by
+      file_type
+      key
+      location
+      originalname
+      file_size
+      created_at
+      referenceId
+      reference_type
+      star
+      tag_list_details {
+        tag_id
+        title
+        tag_color
+        tag_type
+      }
+    }
+    summary {
+      total
+      image
+      audio
+      video
+      voice
+      other
+    }
+    pagination {
+      page
+      totalPages
+      total
+    }
+  }
+}
+''';
+
+    final resolved = fileType == null || fileType == 'all' ? null : fileType;
+    final data = await GraphQLService.call(
+      query,
+      variables: {
+        'page': page,
+        'tag_id': [tagId],
+        if (resolved != null) 'file_type': resolved,
+      },
+    );
+
+    final gallery =
+        data['get_file_gallery'] as Map<String, dynamic>? ?? {};
+    final list = gallery['files'] as List<dynamic>? ?? [];
+    final summaryMap =
+        gallery['summary'] as Map<String, dynamic>? ?? {};
+    final paginationMap =
+        gallery['pagination'] as Map<String, dynamic>? ?? {};
+
+    return FilesResult(
+      files: list
+          .map((e) => SharedFile.fromJson(e as Map<String, dynamic>))
+          .where((f) => f.id.isNotEmpty)
+          .toList(),
+      summary: FilesSummary.fromJson(summaryMap),
+      pagination: PaginationInfo.fromJson(paginationMap),
+    );
   }
 
   // ── Download ──────────────────────────────────────────────────────────────
