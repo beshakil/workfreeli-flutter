@@ -6,6 +6,7 @@ import '../features/conversations/conversations_providers.dart';
 import '../features/user/user_providers.dart';
 import '../theme/app_theme.dart';
 import 'message_screen.dart';
+import 'home/chatlist_action_modal.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -332,10 +333,14 @@ class _RoomTile extends ConsumerWidget {
         ));
       },
       onLongPress: () {
-        showDialog(
+        showModalBottomSheet(
           context: context,
-          barrierColor: Colors.black.withValues(alpha: 0.3),
-          builder: (_) => _RoomActionSheet(room: room, selfId: selfId),
+          isScrollControlled: true,
+          backgroundColor: AppTheme.bgCard,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (_) => ChatListActionModal(room: room, selfId: selfId),
         );
       },
       splashColor: AppTheme.primary.withValues(alpha: 0.06),
@@ -462,167 +467,6 @@ class _RoomTile extends ConsumerWidget {
                     ],
                   ),
                 ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Long-press action sheet ────────────────────────────────────────────────────
-
-class _RoomActionSheet extends ConsumerWidget {
-  const _RoomActionSheet({required this.room, required this.selfId});
-
-  final Room room;
-  final String selfId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final actions = [
-      _ActionItem(
-        icon: room.isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-        label: room.isPinned ? 'Unpin' : 'Pin',
-        isDestructive: room.isPinned,
-      ),
-      _ActionItem(
-        icon: room.isMuted ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-        label: room.isMuted ? 'Unmute' : 'Mute',
-        isDestructive: false,
-      ),
-      _ActionItem(
-        icon: room.isClosedFor ? Icons.lock_open_rounded : Icons.lock_rounded,
-        label: room.isClosedFor ? 'Unlock Room' : 'Lock Room',
-        isDestructive: room.isClosedFor,
-      ),
-      _ActionItem(
-        icon: Icons.archive_rounded,
-        label: 'Archive Room',
-        isDestructive: false,
-      ),
-    ];
-
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (int i = 0; i < actions.length; i++) ...[
-              _ActionTile(
-                icon: actions[i].icon,
-                label: actions[i].label,
-                isDestructive: actions[i].isDestructive,
-                onTap: () => _handleAction(context, ref, i),
-              ),
-              if (i < actions.length - 1) const SizedBox(height: 12),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _handleAction(
-    BuildContext context,
-    WidgetRef ref,
-    int index,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
-
-    try {
-      switch (index) {
-        case 0:
-          await ConversationsService.togglePin(room.id, selfId);
-        case 1:
-          await ConversationsService.toggleMute(room.id, selfId);
-        case 2:
-          await ConversationsService.toggleClose(room.id);
-        case 3:
-          await ConversationsService.archiveConv(room.id);
-      }
-      ref.invalidate(roomsProvider);
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content:
-              Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}'),
-        ),
-      );
-    }
-  }
-}
-
-// ── Action item model ──────────────────────────────────────────────────────────
-
-class _ActionItem {
-  final IconData icon;
-  final String label;
-  final bool isDestructive;
-  const _ActionItem({
-    required this.icon,
-    required this.label,
-    required this.isDestructive,
-  });
-}
-
-// ── Action row tile ────────────────────────────────────────────────────────────
-
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.icon,
-    required this.label,
-    required this.isDestructive,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool isDestructive;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isDestructive ? AppTheme.danger : AppTheme.textPrimary;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppTheme.bgElevated,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Icon(icon, size: 18, color: color),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Text(
-              label,
-              style: AppTheme.bodyLarge.copyWith(
-                color: color,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ],

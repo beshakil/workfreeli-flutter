@@ -381,7 +381,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ],
           ),
-          floatingActionButton: !_isSidebarOpen
+          floatingActionButton: !_isSidebarOpen && _currentIndex == 0
               ? FloatingActionButton(
                   onPressed: _showActionSheet,
                   backgroundColor: const Color(0xFF0F2750),

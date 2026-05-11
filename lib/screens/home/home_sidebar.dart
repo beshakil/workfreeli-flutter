@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'switch_account_modal.dart';
 
 class HomeSidebar extends StatefulWidget {
   final VoidCallback onClose;
@@ -12,6 +13,32 @@ class HomeSidebar extends StatefulWidget {
 
 class _HomeSidebarState extends State<HomeSidebar> {
   bool _isLightMode = true;
+  bool _showSwitchAccountModal = false;
+
+  // Demo account data
+  final List<AccountInfo> _demoAccounts = [
+    const AccountInfo(
+      name: 'MD Ahmed Shakil',
+      role: 'ITL Dev',
+      initial: 'M',
+      avatarColor: Color(0xFF3B82F6),
+      isActive: true,
+    ),
+    const AccountInfo(
+      name: 'Sarah Johnson',
+      role: 'Product Manager',
+      initial: 'S',
+      avatarColor: Color(0xFFEF4444),
+      isActive: false,
+    ),
+    const AccountInfo(
+      name: 'Michael Chen',
+      role: 'UX Designer',
+      initial: 'M',
+      avatarColor: Color(0xFFF59E0B),
+      isActive: false,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +100,23 @@ class _HomeSidebarState extends State<HomeSidebar> {
               ),
             ),
           ),
+          // Switch Account Modal
+          if (_showSwitchAccountModal)
+            SwitchAccountModal(
+              accounts: _demoAccounts,
+              onClose: () {
+                setState(() {
+                  _showSwitchAccountModal = false;
+                });
+              },
+              onAccountSelected: (account) {
+                // Handle account selection
+                setState(() {
+                  _showSwitchAccountModal = false;
+                });
+                // TODO: Implement actual account switching logic
+              },
+            ),
         ],
       ),
     );
@@ -196,57 +240,74 @@ class _HomeSidebarState extends State<HomeSidebar> {
   }
 
   Widget _buildSwitchAccount() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // Left side: Stacked avatars + text
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Stacked avatars
-            SizedBox(
-              height: 32,
-              width: 76,
-              child: Stack(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _showSwitchAccountModal = true;
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Left side: Stacked avatars + text
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // First avatar (back)
-                  Positioned(
-                    left: 0,
-                    child: _buildSmallAvatar('M', const Color(0xFF3B82F6), 0),
+                  // Stacked avatars
+                  SizedBox(
+                    height: 32,
+                    width: 76,
+                    child: Stack(
+                      children: [
+                        // First avatar (back)
+                        Positioned(
+                          left: 0,
+                          child: _buildSmallAvatar(
+                              'M', const Color(0xFF3B82F6), 0),
+                        ),
+                        // Second avatar (middle)
+                        Positioned(
+                          left: 24,
+                          child: _buildSmallAvatar(
+                              'S', const Color(0xFFEF4444), 1),
+                        ),
+                        // Third avatar (front)
+                        Positioned(
+                          left: 48,
+                          child: _buildSmallAvatar(
+                              'M', const Color(0xFFF59E0B), 2),
+                        ),
+                      ],
+                    ),
                   ),
-                  // Second avatar (middle)
-                  Positioned(
-                    left: 24,
-                    child: _buildSmallAvatar('S', const Color(0xFFEF4444), 1),
-                  ),
-                  // Third avatar (front)
-                  Positioned(
-                    left: 48,
-                    child: _buildSmallAvatar('M', const Color(0xFFF59E0B), 2),
+                  // 10px gap
+                  const SizedBox(width: 10),
+                  // Switch Account text
+                  const Text(
+                    'Switch Account',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
-            ),
-            // 10px gap
-            const SizedBox(width: 10),
-            // Switch Account text
-            const Text(
-              'Switch Account',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+              // Right side: Icon
+              const Icon(
+                Icons.swap_horiz_rounded,
+                color: Color(0xFF94A3B8),
+                size: 20,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        // Right side: Icon
-        const Icon(
-          Icons.swap_horiz_rounded,
-          color: Color(0xFF94A3B8),
-          size: 20,
-        ),
-      ],
+      ),
     );
   }
 

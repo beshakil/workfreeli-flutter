@@ -3,28 +3,28 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // ── Brand / Interactive (matches web #2440bd) ─────────────────────────────
-  static const Color primary     = Color(0xFF2440BD);
-  static const Color accent      = Color(0xFF6366F1); // indigo
-  static const Color accentSoft  = Color(0xFFEEF2FF); // soft indigo bg
+  static const Color primary = Color(0xFF2440BD);
+  static const Color accent = Color(0xFF6366F1); // indigo
+  static const Color accentSoft = Color(0xFFEEF2FF); // soft indigo bg
 
   // Backward-compat aliases kept so existing code compiles
   static const Color primaryLight = accent;
-  static const Color primaryDark  = Color(0xFF1E35A0);
+  static const Color primaryDark = Color(0xFF1E35A0);
 
   // ── Backgrounds (light — matches web) ────────────────────────────────────
-  static const Color bg          = Color(0xFFF1F5F9); // page bg
-  static const Color bgCard      = Color(0xFFFFFFFF); // card / panel
-  static const Color bgElevated  = Color(0xFFF8FAFC); // elevated surface
-  static const Color bgHover     = Color(0xFFF1F5F9); // hover state
+  static const Color bg = Color(0xFFF1F5F9); // page bg
+  static const Color bgCard = Color(0xFFFFFFFF); // card / panel
+  static const Color bgElevated = Color(0xFFF8FAFC); // elevated surface
+  static const Color bgHover = Color(0xFFF1F5F9); // hover state
 
   // ── Text ──────────────────────────────────────────────────────────────────
-  static const Color textPrimary = Color(0xFF0F172A); // near-black
-  static const Color textMuted   = Color(0xFF64748B); // secondary text
-  static const Color textDim     = Color(0xFF94A3B8); // placeholder / dim
+  static const Color textPrimary = Color(0xFF0F2750); // near-black
+  static const Color textMuted = Color(0xFF64748B); // secondary text
+  static const Color textDim = Color(0xFF94A3B8); // placeholder / dim
 
   // ── Borders & Status ─────────────────────────────────────────────────────
-  static const Color border  = Color(0xFFE2E8F0);
-  static const Color danger  = Color(0xFFEF4444);
+  static const Color border = Color(0xFFE2E8F0);
+  static const Color danger = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);
   static const Color success = Color(0xFF10B981);
 
@@ -65,13 +65,13 @@ class AppTheme {
 
   // ── Text Styles ───────────────────────────────────────────────────────────
   static TextStyle get headingLarge => GoogleFonts.sora(
-        fontSize: 28, fontWeight: FontWeight.w700, color: textPrimary);
+      fontSize: 28, fontWeight: FontWeight.w700, color: textPrimary);
 
   static TextStyle get headingMedium => GoogleFonts.sora(
-        fontSize: 22, fontWeight: FontWeight.w600, color: textPrimary);
+      fontSize: 22, fontWeight: FontWeight.w600, color: textPrimary);
 
   static TextStyle get headingSmall => GoogleFonts.sora(
-        fontSize: 16, fontWeight: FontWeight.w600, color: textPrimary);
+      fontSize: 16, fontWeight: FontWeight.w600, color: textPrimary);
 
   static TextStyle get bodyLarge =>
       GoogleFonts.dmSans(fontSize: 15, color: textPrimary);
@@ -122,8 +122,7 @@ class AppTheme {
           secondary: accent,
           surface: bgCard,
         ),
-        textTheme:
-            GoogleFonts.dmSansTextTheme(ThemeData.light().textTheme),
+        textTheme: GoogleFonts.dmSansTextTheme(ThemeData.light().textTheme),
         appBarTheme: AppBarTheme(
           backgroundColor: bgCard,
           elevation: 0,
