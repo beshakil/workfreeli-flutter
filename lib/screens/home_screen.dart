@@ -8,7 +8,9 @@ import '../features/xmpp/xmpp_provider.dart';
 import '../shared/home_screen_header.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
+import 'calls_screen.dart';
 import 'files_screen.dart';
+import 'home_sidebar.dart';
 import 'profile_screen.dart';
 import 'tasks_screen.dart';
 
@@ -23,9 +25,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   late AnimationController _fadeController;
+  bool _isSidebarOpen = false;
 
   final List<Widget> _screens = const [
     ChatScreen(),
+    CallsScreen(),
     TasksScreen(),
     FilesScreen(),
     ProfileScreen(),
@@ -52,6 +56,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _fadeController.reset();
     setState(() => _currentIndex = index);
     _fadeController.forward();
+  }
+
+  void _toggleSidebar() {
+    setState(() {
+      _isSidebarOpen = !_isSidebarOpen;
+    });
   }
 
   String _buildPreview(Map<String, dynamic> data) {
@@ -149,70 +159,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final totalUnread = ref.watch(
         unreadCountsProvider.select((m) => m.values.fold(0, (a, b) => a + b)));
 
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const HomeScreenHeader(),
-            Expanded(
-              child: FadeTransition(
-                opacity: _fadeController,
-                child: _screens[_currentIndex],
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppTheme.bg,
+          body: Column(
+            children: [
+              HomeScreenHeader(
+                onMenuTap: _toggleSidebar,
               ),
+              Expanded(
+                child: FadeTransition(
+                  opacity: _fadeController,
+                  child: _screens[_currentIndex],
+                ),
+              ),
+            ],
+          ),
+          floatingActionButton: !_isSidebarOpen
+              ? FloatingActionButton(
+                  onPressed: () {},
+                  backgroundColor: const Color(0xFF0F2750),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                )
+              : null,
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: AppTheme.bgCard,
+              border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: const Color(0xFF0F2750),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: const Icon(
-          Icons.add_rounded,
-          color: Colors.white,
-          size: 28,
-        ),
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(
-                  icon: Icons.chat_bubble_rounded,
-                  label: 'Messages',
-                  index: 0,
-                  badge: totalUnread,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildNavItem(
+                      icon: Icons.chat_bubble_rounded,
+                      label: 'Messages',
+                      index: 0,
+                      badge: totalUnread,
+                    ),
+                    _buildNavItem(
+                      icon: Icons.phone_rounded,
+                      label: 'Calls',
+                      index: 1,
+                    ),
+                    _buildNavItem(
+                      icon: Icons.view_kanban_rounded,
+                      label: 'Tasks',
+                      index: 2,
+                    ),
+                    _buildNavItem(
+                      icon: Icons.folder_rounded,
+                      label: 'Files',
+                      index: 3,
+                    ),
+                    _buildNavItem(
+                      icon: Icons.person_rounded,
+                      label: 'Profile',
+                      index: 4,
+                    ),
+                  ],
                 ),
-                _buildNavItem(
-                  icon: Icons.view_kanban_rounded,
-                  label: 'Tasks',
-                  index: 1,
-                ),
-                _buildNavItem(
-                  icon: Icons.folder_rounded,
-                  label: 'Files',
-                  index: 2,
-                ),
-                _buildNavItem(
-                  icon: Icons.person_rounded,
-                  label: 'Profile',
-                  index: 3,
-                ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        if (_isSidebarOpen) HomeSidebar(onClose: _toggleSidebar),
+      ],
     );
   }
 
