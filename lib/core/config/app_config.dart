@@ -18,7 +18,7 @@ class AppConfig {
   // Defaults to same host as API server (ejabberd runs alongside the API).
   static const String xmppDomain = String.fromEnvironment(
     'XMPP_DOMAIN',
-    defaultValue: 'caquecdn03.freeli.io',
+    defaultValue: 'caquecdn02.freeli.io',
   );
 
   // ws:// for dev (cleartext), wss:// for production

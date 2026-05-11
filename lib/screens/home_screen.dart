@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/encryption/encryption_service.dart';
+import '../core/models/conversation_models.dart' show Room;
 import '../features/conversations/conversations_providers.dart';
 import '../features/user/user_providers.dart';
 import '../features/xmpp/xmpp_provider.dart';
@@ -11,6 +12,9 @@ import 'chat_screen.dart';
 import 'calls_screen.dart';
 import 'files_screen.dart';
 import 'home_sidebar.dart';
+import 'create_room_sheet.dart';
+import 'direct_message_sheet.dart';
+import 'message_screen.dart';
 import 'profile_screen.dart';
 import 'tasks_screen.dart';
 
@@ -22,7 +26,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _currentIndex = 0;
   late AnimationController _fadeController;
   bool _isSidebarOpen = false;
@@ -38,6 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -47,8 +52,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
     super.dispose();
+  }
+
+  // Refresh data whenever the app returns to foreground so users never need
+  // to restart the app to see new rooms, updated metadata, or fresh counts.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(roomsProvider);
+      ref.invalidate(unreadInitProvider);
+    }
   }
 
   void _onTabTapped(int index) {
@@ -74,6 +90,130 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     } catch (_) {
       return 'New message';
     }
+  }
+
+  Future<void> _showActionSheet() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.person_add_rounded,
+                      color: AppTheme.primary, size: 20),
+                ),
+                title: Text('Direct Message',
+                    style: AppTheme.bodyMedium
+                        .copyWith(fontWeight: FontWeight.w600)),
+                subtitle: Text('Start a private conversation',
+                    style: AppTheme.caption),
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: AppTheme.textDim),
+                onTap: () => Navigator.of(ctx).pop('dm'),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              const SizedBox(height: 4),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.group_add_rounded,
+                      color: AppTheme.primary, size: 20),
+                ),
+                title: Text('Create Room',
+                    style: AppTheme.bodyMedium
+                        .copyWith(fontWeight: FontWeight.w600)),
+                subtitle:
+                    Text('Create a group channel', style: AppTheme.caption),
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: AppTheme.textDim),
+                onTap: () => Navigator.of(ctx).pop('room'),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    if (choice == 'dm') {
+      await _showDirectMessageSheet();
+    } else if (choice == 'room') {
+      await _showCreateRoomSheet();
+    }
+  }
+
+  Future<void> _showDirectMessageSheet() async {
+    final result = await showModalBottomSheet<({Room room, String selfId})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const DirectMessageSheet(),
+    );
+
+    if (!mounted || result == null) return;
+    ref.invalidate(roomsProvider);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MessageScreen(room: result.room, selfId: result.selfId),
+      ),
+    );
+  }
+
+  Future<void> _showCreateRoomSheet() async {
+    final result = await showModalBottomSheet<({Room room, String selfId})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const CreateRoomSheet(),
+    );
+
+    if (!mounted || result == null) return;
+    ref.invalidate(roomsProvider);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MessageScreen(room: result.room, selfId: result.selfId),
+      ),
+    );
   }
 
   @override
@@ -152,6 +292,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
         case 'pin_unpin':
           ref.invalidate(roomsProvider);
+
+        case 'xmpp_connected':
+          // XMPP (re)connected after a drop — refresh rooms and unread counts
+          // to catch up on any changes that arrived while offline.
+          ref.invalidate(roomsProvider);
+          ref.invalidate(unreadInitProvider);
       }
     });
 
@@ -178,7 +324,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
           floatingActionButton: !_isSidebarOpen
               ? FloatingActionButton(
-                  onPressed: () {},
+                  onPressed: _showActionSheet,
                   backgroundColor: const Color(0xFF0F2750),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),

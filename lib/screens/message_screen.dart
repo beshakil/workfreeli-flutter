@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +33,15 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
 
+  StreamSubscription<XmppEvent>? _xmppSub;
+
+  // Cached notifier references so callbacks and dispose() never touch `ref`
+  // directly. Riverpod invalidates `ref` in _ConsumerElement.unmount() which
+  // runs *before* Flutter calls our dispose(), making any ref.read() there
+  // throw "Cannot use ref after the widget was disposed".
+  StateController<String?>? _activeRoomIdCtrl;
+  MessagesNotifier? _messagesNotifier;
+
   MsgArgs get _args => (
         roomId: widget.room.id,
         selfId: widget.selfId,
@@ -43,20 +54,38 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
 
+    // Cache notifiers during initState when ref is guaranteed valid.
+    _activeRoomIdCtrl = ref.read(activeRoomIdProvider.notifier);
+    _messagesNotifier = ref.read(messagesProvider(_args).notifier);
+
+    // Subscribe directly to the XMPP broadcast stream.
+    // Using a StreamSubscription in initState() is more reliable than
+    // ref.listen in build(): it fires for every event regardless of rebuild
+    // scheduling and cannot miss rapid successive events.
+    _xmppSub = XmppService.instance.events.listen((event) {
+      if (!mounted) return;
+      _handleXmppEvent(event);
+    });
+    debugPrint('[MessageScreen] XMPP subscription started for room ${widget.room.id}');
+
     // Mark this conversation as active so unread stops incrementing.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(activeRoomIdProvider.notifier).state = widget.room.id;
+      if (!mounted) return;
+      _activeRoomIdCtrl?.state = widget.room.id;
       ref.read(unreadCountsProvider.notifier).reset(widget.room.id);
-      // Tell the backend the user has read all messages — keeps server unread
-      // count in sync so the next login shows the correct badge.
+      // Tell the backend the user has read all messages.
       ConversationsService.readAll(widget.room.id).catchError((_) {});
     });
   }
 
   @override
   void dispose() {
-    // Clear active room so unread resumes on future messages.
-    ref.read(activeRoomIdProvider.notifier).state = null;
+    _xmppSub?.cancel();
+    debugPrint('[MessageScreen] XMPP subscription cancelled for room ${widget.room.id}');
+
+    // Use cached controller — ref is already invalid here because Riverpod's
+    // _ConsumerElement.unmount() runs before Flutter calls dispose().
+    _activeRoomIdCtrl?.state = null;
 
     _msgController.dispose();
     _scrollController
@@ -69,29 +98,56 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 300) {
-      ref.read(messagesProvider(_args).notifier).loadMore();
+      _messagesNotifier?.loadMore();
     }
   }
 
+  // ── XMPP online check ─────────────────────────────────────────────────────
+
+  bool get _xmppOnline =>
+      ref.read(xmppServiceProvider).state == XmppState.connected;
+
   // ── XMPP real-time injection ──────────────────────────────────────────────
 
-  /// Called by ref.listen every time a new XMPP event arrives.
-  /// Mirrors React client: only process messages from OTHER users — own
-  /// messages are already added by the GraphQL mutation response.
   void _handleXmppEvent(XmppEvent event) {
-    if (event.type != 'new_message' && event.type != 'new_reply_message') return;
+    debugPrint('[MessageScreen] ← XMPP event type="${event.type}" room="${widget.room.id}"');
 
-    // Skip XMPP echo of own messages — GraphQL sendMessage() already prepends
-    // them. Processing the echo would cause a duplicate (race condition when
-    // XMPP broadcast arrives before mutation response completes).
+    if (event.type != 'new_message' && event.type != 'new_reply_message') {
+      debugPrint('[MessageScreen]   ignored (not a message event)');
+      return;
+    }
+
+    final convId = event.data['conversation_id']?.toString() ??
+        event.data['conv_id']?.toString() ?? '';
     final senderId = event.data['sender']?.toString() ??
         event.data['user_id']?.toString() ?? '';
-    if (senderId == widget.selfId) return;
+    final msgId = event.data['msg_id']?.toString() ?? '';
+
+    debugPrint('[MessageScreen]   conv_id="$convId" sender="$senderId" msg_id="$msgId"');
+    debugPrint('[MessageScreen]   selfId="${widget.selfId}" activeRoom="${widget.room.id}"');
+
+    if (convId.isNotEmpty && convId != widget.room.id) {
+      debugPrint('[MessageScreen]   ignored (different room: $convId)');
+      return;
+    }
+
+    // Skip XMPP echo of own messages — the GraphQL mutation already prepended
+    // the message to state. addRealTimeMessage() also deduplicates by msg_id
+    // as a safety net in case the echo arrives before the mutation response.
+    if (senderId == widget.selfId) {
+      debugPrint('[MessageScreen]   ignored (own message echo)');
+      return;
+    }
 
     final msg = MessagesNotifier.parseXmppMessage(
         event.data, widget.selfId, widget.room.id);
-    if (msg == null) return;
-    ref.read(messagesProvider(_args).notifier).addRealTimeMessage(msg);
+    if (msg == null) {
+      debugPrint('[MessageScreen]   parseXmppMessage returned null — dropping event');
+      return;
+    }
+
+    debugPrint('[MessageScreen]   injecting real-time message id="${msg.id}"');
+    _messagesNotifier?.addRealTimeMessage(msg);
     _scrollToTop();
   }
 
@@ -117,6 +173,14 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     final hasPendingFiles =
         ref.read(messagesProvider(_args)).pendingFiles.isNotEmpty;
     if (text.isEmpty && !hasPendingFiles) return;
+
+    // Log XMPP state but NEVER block the send — messages are stored in the
+    // backend via GraphQL regardless of XMPP state. XMPP is only the real-time
+    // delivery channel; blocking here would prevent sends whenever XMPP is
+    // still establishing its connection.
+    if (!_xmppOnline) {
+      debugPrint('[MessageScreen] XMPP not connected — message will be sent via GraphQL but real-time push may be delayed');
+    }
 
     // If there are files, offer tag selection before sending.
     if (hasPendingFiles) {
@@ -200,13 +264,6 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(messagesProvider(_args));
-
-    // Listen for real-time XMPP events while this screen is open.
-    ref.listen(xmppEventStreamProvider, (_, next) {
-      if (next.hasValue && next.value != null) {
-        _handleXmppEvent(next.value!);
-      }
-    });
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -766,6 +823,22 @@ class _MessageBubble extends StatelessWidget {
     );
   }
 
+  // Renders one attachment: image → inline thumbnail, other → file card.
+  Widget _buildAttachment(MessageAttachment a, bool isSelf) {
+    if (a.isImage) {
+      return _ImageThumbnail(
+        attachment: a,
+        isSelf: isSelf,
+        onTap: () => onOpenAttachment(message, a),
+      );
+    }
+    return _AttachmentCard(
+      attachment: a,
+      isSelf: isSelf,
+      onTap: () => onOpenAttachment(message, a),
+    );
+  }
+
   Widget _selfBubble(BuildContext context) {
     final maxW = MediaQuery.of(context).size.width * 0.78;
     return Column(
@@ -780,10 +853,7 @@ class _MessageBubble extends StatelessWidget {
                 ...message.attachments.map(
                   (a) => Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: _AttachmentCard(
-                        attachment: a,
-                        isSelf: true,
-                        onTap: () => onOpenAttachment(message, a)),
+                    child: _buildAttachment(a, true),
                   ),
                 ),
               if (message.msg.isNotEmpty)
@@ -881,10 +951,7 @@ class _MessageBubble extends StatelessWidget {
                       ...message.attachments.map(
                         (a) => Padding(
                           padding: const EdgeInsets.only(bottom: 4),
-                          child: _AttachmentCard(
-                              attachment: a,
-                              isSelf: false,
-                              onTap: () => onOpenAttachment(message, a)),
+                          child: _buildAttachment(a, false),
                         ),
                       ),
                     if (message.msg.isNotEmpty)
@@ -1071,6 +1138,86 @@ class _AttachmentCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─── Image Thumbnail ─────────────────────────────────────────────────────────
+
+/// Renders an image attachment as an inline thumbnail inside the chat bubble.
+/// Tapping opens the fullscreen gallery via [onTap].
+class _ImageThumbnail extends StatelessWidget {
+  const _ImageThumbnail({
+    required this.attachment,
+    required this.isSelf,
+    required this.onTap,
+  });
+
+  final MessageAttachment attachment;
+  final bool isSelf;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = attachment.downloadUrl(AppConfig.fileBaseUrl);
+    final maxW = MediaQuery.of(context).size.width * 0.65;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: url.isEmpty
+            ? _placeholder(maxW)
+            : CachedNetworkImage(
+                imageUrl: url,
+                width: maxW,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => _placeholder(maxW),
+                errorWidget: (_, __, ___) => _errorWidget(maxW),
+              ),
+      ),
+    );
+  }
+
+  Widget _placeholder(double maxW) => Container(
+        width: maxW,
+        height: 160,
+        decoration: BoxDecoration(
+          color: AppTheme.bgElevated,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppTheme.primary),
+          ),
+        ),
+      );
+
+  Widget _errorWidget(double maxW) => Container(
+        width: maxW,
+        height: 120,
+        decoration: BoxDecoration(
+          color: AppTheme.bgElevated,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.broken_image_rounded,
+                color: AppTheme.textDim, size: 28),
+            const SizedBox(height: 6),
+            Text(
+              attachment.originalName,
+              style: AppTheme.caption,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
 }
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────

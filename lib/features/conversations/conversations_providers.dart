@@ -229,8 +229,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         page: 1,
         selfId: _selfId,
       );
+      final fetched = page.messages.reversed.toList();
+      // Preserve any real-time XMPP messages that arrived while the GraphQL
+      // fetch was in-flight. Those messages are at the front of state.messages
+      // (newest-first) and may not yet be in the server's page-1 response if
+      // the DB write races with this read. Deduplicate by msg_id so we never
+      // show a message twice.
+      final fetchedIds = fetched.map((m) => m.id).toSet();
+      final realtimeOnly = state.messages
+          .where((m) => !fetchedIds.contains(m.id))
+          .toList();
       state = state.copyWith(
-        messages: page.messages.reversed.toList(),
+        messages: [...realtimeOnly, ...fetched],
         isLoading: false,
         hasMore: page.hasMore,
         currentPage: page.page,
@@ -267,7 +277,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   /// Injects a message received via XMPP without an API round-trip.
   /// Deduplicates by msg_id so a rapid refresh + XMPP event don't duplicate.
   void addRealTimeMessage(ChatMessage msg) {
-    if (state.messages.any((m) => m.id == msg.id)) return;
+    if (state.messages.any((m) => m.id == msg.id)) {
+      debugPrint('[MessagesNotifier] addRealTimeMessage: duplicate id="${msg.id}" — skipped');
+      return;
+    }
+    debugPrint('[MessagesNotifier] addRealTimeMessage: prepending id="${msg.id}" sender="${msg.senderId}"');
     state = state.copyWith(messages: [msg, ...state.messages]);
   }
 
@@ -281,29 +295,39 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     try {
       final convId = data['conversation_id']?.toString() ??
           data['conv_id']?.toString() ?? '';
-      if (convId.isNotEmpty && convId != roomId) return null;
+      debugPrint('[parseXmppMessage] convId="$convId" roomId="$roomId" selfId="$selfId"');
 
-      // Decrypt body field — EncryptionService.decrypt is called inside
-      // ChatMessage.fromJson, so we just forward rawBody as-is.
+      if (convId.isNotEmpty && convId != roomId) {
+        debugPrint('[parseXmppMessage] filtered: wrong room');
+        return null;
+      }
+
       final rawBody = data['msg_body']?.toString() ?? '';
+      final msgId = (data['msg_id'] ?? data['_id'] ?? '').toString();
+      final sender = (data['sender'] ?? data['user_id'] ?? '').toString();
+      debugPrint('[parseXmppMessage] msg_id="$msgId" sender="$sender" bodyLen=${rawBody.length}');
 
-      // Build a ChatMessage-compatible JSON map from the XMPP payload.
+      if (msgId.isEmpty) {
+        debugPrint('[parseXmppMessage] empty msg_id — dropping');
+        return null;
+      }
+
       final msgMap = <String, dynamic>{
-        'msg_id': data['msg_id'] ?? data['_id'] ?? '',
+        'msg_id': msgId,
         'msg_body': rawBody,
         'msg_type': data['msg_type'] ?? 'text',
-        'sender': data['sender'] ?? data['user_id'] ?? '',
+        'sender': sender,
         'sendername': data['sendername'] ?? data['sender_name'] ?? '',
         'senderimg': data['senderimg'] ?? data['sender_img'],
         'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
         'all_attachment': data['all_attachment'] ?? [],
       };
 
-      if ((msgMap['msg_id'] as String).isEmpty) return null;
-
-      return ChatMessage.fromJson(msgMap, selfId: selfId);
+      final msg = ChatMessage.fromJson(msgMap, selfId: selfId);
+      debugPrint('[parseXmppMessage] built ChatMessage id="${msg.id}" isSelf=${msg.isSelf}');
+      return msg;
     } catch (e) {
-      debugPrint('[MessagesNotifier] parseXmppMessage error: $e');
+      debugPrint('[parseXmppMessage] error: $e');
       return null;
     }
   }

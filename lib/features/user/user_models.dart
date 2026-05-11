@@ -63,3 +63,44 @@ class AppUser {
 
   bool get isAdmin => role == 'admin' || access.contains('admin');
 }
+
+// ── Company user (for DM / Create Room user selection) ───────────────────────
+
+class CompanyUser {
+  final String id;
+  final String firstname;
+  final String lastname;
+  final String? email;
+  final String? img;
+
+  const CompanyUser({
+    required this.id,
+    required this.firstname,
+    required this.lastname,
+    this.email,
+    this.img,
+  });
+
+  factory CompanyUser.fromJson(Map<String, dynamic> json) => CompanyUser(
+        id: json['id']?.toString() ?? '',
+        firstname: json['firstname']?.toString() ?? '',
+        lastname: json['lastname']?.toString() ?? '',
+        email: json['email']?.toString(),
+        img: json['img']?.toString(),
+      );
+
+  String get fullName => '$firstname $lastname'.trim();
+
+  String get initials {
+    final f = firstname.isNotEmpty ? firstname[0].toUpperCase() : '';
+    final l = lastname.isNotEmpty ? lastname[0].toUpperCase() : '';
+    final combined = '$f$l';
+    return combined.isNotEmpty ? combined : '?';
+  }
+
+  bool matches(String query) {
+    final q = query.toLowerCase();
+    return fullName.toLowerCase().contains(q) ||
+        (email?.toLowerCase().contains(q) ?? false);
+  }
+}

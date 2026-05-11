@@ -40,7 +40,6 @@ dependencies:
   photo_view: ^0.15.0
   # Open downloaded files with system default app
   open_filex: ^4.7.0
-  # Android storage & notification permissions
   permission_handler: ^11.3.1
 
 dev_dependencies:
