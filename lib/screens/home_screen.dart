@@ -11,7 +11,8 @@ import '../theme/app_theme.dart';
 import 'chat_screen.dart';
 import 'calls_screen.dart';
 import 'files_screen.dart';
-import 'home_sidebar.dart';
+import 'home/home_sidebar.dart';
+import 'home/home_chat_filter_dropdown.dart';
 import 'create_room_sheet.dart';
 import 'direct_message_sheet.dart';
 import 'message_screen.dart';
@@ -30,6 +31,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   int _currentIndex = 0;
   late AnimationController _fadeController;
   bool _isSidebarOpen = false;
+  bool _isFilterDropdownOpen = false;
+  String _selectedFilter = 'All';
+  OverlayEntry? _filterDropdownOverlay;
 
   final List<Widget> _screens = const [
     ChatScreen(),
@@ -52,6 +56,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   void dispose() {
+    _hideFilterDropdown();
     WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
     super.dispose();
@@ -77,6 +82,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void _toggleSidebar() {
     setState(() {
       _isSidebarOpen = !_isSidebarOpen;
+    });
+  }
+
+  void _toggleFilterDropdown() {
+    if (_isFilterDropdownOpen) {
+      _hideFilterDropdown();
+    } else {
+      _showFilterDropdown();
+    }
+  }
+
+  void _showFilterDropdown() {
+    setState(() {
+      _isFilterDropdownOpen = true;
+    });
+
+    _filterDropdownOverlay = OverlayEntry(
+      builder: (context) => GestureDetector(
+        onTap: () => _hideFilterDropdown(),
+        child: Container(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned(
+                top: HomeScreenHeader.headerHeight + 8,
+                right: 60,
+                child: HomeChatFilterDropdown(
+                  selectedFilter: _selectedFilter,
+                  onFilterSelected: (filter) {
+                    setState(() {
+                      _selectedFilter = filter;
+                    });
+                    _hideFilterDropdown();
+                    // TODO: Apply filter to chat list
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_filterDropdownOverlay!);
+  }
+
+  void _hideFilterDropdown() {
+    _filterDropdownOverlay?.remove();
+    _filterDropdownOverlay = null;
+    setState(() {
+      _isFilterDropdownOpen = false;
     });
   }
 
@@ -312,7 +368,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           body: Column(
             children: [
               HomeScreenHeader(
+                onFilterTap: _toggleFilterDropdown,
                 onMenuTap: _toggleSidebar,
+                selectedFilter: _selectedFilter,
+                showFilterDropdown: _isFilterDropdownOpen,
               ),
               Expanded(
                 child: FadeTransition(

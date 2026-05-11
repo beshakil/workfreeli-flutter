@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 ///
 /// Designed to be used across multiple screens. Provides branding (logo)
 /// on the left and action icons (filter, menu) on the right.
-class HomeScreenHeader extends StatelessWidget {
+class HomeScreenHeader extends StatefulWidget {
   /// Height of the header bar.
   static const double headerHeight = 60.0;
 
@@ -14,16 +14,29 @@ class HomeScreenHeader extends StatelessWidget {
   /// Called when the menu icon is tapped.
   final VoidCallback? onMenuTap;
 
+  /// Currently selected filter
+  final String selectedFilter;
+
+  /// Whether the filter dropdown is visible
+  final bool showFilterDropdown;
+
   const HomeScreenHeader({
     super.key,
     this.onFilterTap,
     this.onMenuTap,
+    this.selectedFilter = 'All',
+    this.showFilterDropdown = false,
   });
 
   @override
+  State<HomeScreenHeader> createState() => _HomeScreenHeaderState();
+}
+
+class _HomeScreenHeaderState extends State<HomeScreenHeader> {
+  @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: headerHeight,
+      height: HomeScreenHeader.headerHeight,
       child: Container(
         decoration: const BoxDecoration(
           color: Color(0xFF0F2750),
@@ -37,12 +50,12 @@ class HomeScreenHeader extends StatelessWidget {
             // ── Action icons ──────────────────────────────────────────
             _buildIconButton(
               icon: Icons.filter_alt_rounded,
-              onTap: onFilterTap,
+              onTap: widget.onFilterTap,
             ),
             const SizedBox(width: 4),
             _buildIconButton(
               icon: Icons.menu_rounded,
-              onTap: onMenuTap,
+              onTap: widget.onMenuTap,
             ),
             const SizedBox(width: 8),
           ],

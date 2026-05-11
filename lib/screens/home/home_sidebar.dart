@@ -50,8 +50,12 @@ class _HomeSidebarState extends State<HomeSidebar> {
                   style: const TextStyle(decoration: TextDecoration.none),
                   child: Column(
                     children: [
-                      // Header & Profile Section
-                      _buildHeaderSection(),
+                      const SizedBox(height: 20),
+                      // Header Container with Logo & Actions
+                      _buildHeaderContainer(),
+                      const SizedBox(height: 20),
+                      // Combined User Bio & Switch Account Container
+                      _buildUserBioAndSwitchAccount(),
                       const SizedBox(height: 20),
                       // Quick Access Apps
                       _buildQuickAccessApps(),
@@ -74,49 +78,22 @@ class _HomeSidebarState extends State<HomeSidebar> {
     );
   }
 
-  Widget _buildHeaderSection() {
+  Widget _buildUserBioAndSwitchAccount() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.1),
-            width: 1,
-          ),
-        ),
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
-          // Logo & Actions
-          Row(
-            children: [
-              // Logo
-              _buildLogo(),
-              const Spacer(),
-              // Settings icon
-              _buildIconActionButton(
-                icon: Icons.settings_rounded,
-                onTap: () {},
-              ),
-              const SizedBox(width: 8),
-              // Close icon
-              _buildIconActionButton(
-                icon: Icons.close_rounded,
-                onTap: widget.onClose,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
           // User Avatar
           Container(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF3B82F6),
               shape: BoxShape.circle,
             ),
             child: const Center(
@@ -140,26 +117,50 @@ class _HomeSidebarState extends State<HomeSidebar> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           // User Role
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              'ITL Dev',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+          const Text(
+            'ITL Dev',
+            style: TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
             ),
           ),
           const SizedBox(height: 16),
+          // Divider
+          Container(
+            height: 1,
+            color: Colors.white.withValues(alpha: 0.1),
+          ),
+          const SizedBox(height: 12),
           // Switch Account
           _buildSwitchAccount(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderContainer() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+      child: Row(
+        children: [
+          // Logo
+          _buildLogo(),
+          const Spacer(),
+          // Settings icon
+          _buildIconActionButton(
+            icon: Icons.settings_rounded,
+            onTap: () {},
+          ),
+          const SizedBox(width: 8),
+          // Close icon
+          _buildIconActionButton(
+            icon: Icons.close_rounded,
+            onTap: widget.onClose,
+          ),
         ],
       ),
     );
@@ -195,36 +196,61 @@ class _HomeSidebarState extends State<HomeSidebar> {
   }
 
   Widget _buildSwitchAccount() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Left side: Stacked avatars + text
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Stacked avatars
+            SizedBox(
+              height: 32,
+              width: 76,
+              child: Stack(
+                children: [
+                  // First avatar (back)
+                  Positioned(
+                    left: 0,
+                    child: _buildSmallAvatar('M', const Color(0xFF3B82F6), 0),
+                  ),
+                  // Second avatar (middle)
+                  Positioned(
+                    left: 24,
+                    child: _buildSmallAvatar('S', const Color(0xFFEF4444), 1),
+                  ),
+                  // Third avatar (front)
+                  Positioned(
+                    left: 48,
+                    child: _buildSmallAvatar('M', const Color(0xFFF59E0B), 2),
+                  ),
+                ],
+              ),
+            ),
+            // 10px gap
+            const SizedBox(width: 10),
+            // Switch Account text
+            const Text(
+              'Switch Account',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
-      ),
-      child: Row(
-        children: [
-          // Three small avatars
-          _buildSmallAvatar('M', const Color(0xFF3B82F6)),
-          const SizedBox(width: 6),
-          _buildSmallAvatar('S', const Color(0xFFEC4899)),
-          const SizedBox(width: 6),
-          _buildSmallAvatar('M', const Color(0xFF10B981)),
-          const Spacer(),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: Colors.white70,
-            size: 20,
-          ),
-        ],
-      ),
+        // Right side: Icon
+        const Icon(
+          Icons.swap_horiz_rounded,
+          color: Color(0xFF94A3B8),
+          size: 20,
+        ),
+      ],
     );
   }
 
-  Widget _buildSmallAvatar(String letter, Color color) {
+  Widget _buildSmallAvatar(String letter, Color color, int index) {
     return Container(
       width: 28,
       height: 28,
@@ -297,7 +323,7 @@ class _HomeSidebarState extends State<HomeSidebar> {
             height: 48,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               icon,
@@ -347,7 +373,7 @@ class _HomeSidebarState extends State<HomeSidebar> {
               fontSize: 13,
             ),
           ),
-          iconBgColor: const Color(0xFFEF4444).withValues(alpha: 0.2),
+          iconBgColor: Colors.white.withValues(alpha: 0.1),
           iconColor: const Color(0xFFEF4444),
           badge: '2',
         ),
@@ -355,21 +381,21 @@ class _HomeSidebarState extends State<HomeSidebar> {
         _buildMenuItem(
           icon: Icons.notifications_rounded,
           label: 'All notifications',
-          iconBgColor: Colors.transparent,
+          iconBgColor: Colors.white.withValues(alpha: 0.1),
           iconColor: Colors.white,
         ),
         const SizedBox(height: 4),
         _buildMenuItem(
           icon: Icons.lock_rounded,
           label: 'Change password',
-          iconBgColor: Colors.transparent,
+          iconBgColor: Colors.white.withValues(alpha: 0.1),
           iconColor: Colors.white,
         ),
         const SizedBox(height: 4),
         _buildMenuItem(
           icon: Icons.shield_rounded,
           label: 'Admin settings',
-          iconBgColor: Colors.transparent,
+          iconBgColor: Colors.white.withValues(alpha: 0.1),
           iconColor: Colors.white,
         ),
         const SizedBox(height: 4),
@@ -387,7 +413,7 @@ class _HomeSidebarState extends State<HomeSidebar> {
     String? badge,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
           // Icon with background
@@ -450,11 +476,7 @@ class _HomeSidebarState extends State<HomeSidebar> {
 
   Widget _buildThemeToggle() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: Colors.white.withValues(alpha: 0.03),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
           // Sun icon
@@ -462,7 +484,7 @@ class _HomeSidebarState extends State<HomeSidebar> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: Colors.transparent,
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
