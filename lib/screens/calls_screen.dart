@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../features/calls/call_models.dart';
+import '../features/calls/call_signaling_service.dart';
 import '../features/calls/calls_providers.dart';
+import '../features/calls/jitsi_service.dart';
 import '../features/conversations/conversations_providers.dart';
 import '../features/user/user_providers.dart';
 import '../theme/app_theme.dart';
@@ -30,6 +32,73 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
   Future<void> _refresh() async {
     ref.invalidate(callHistoryProvider);
     await ref.read(callHistoryProvider.future);
+  }
+
+  Future<void> _startCallFromHistory(
+      CallHistoryEntry entry, bool isVideo) async {
+    final me = ref.read(meProvider).valueOrNull;
+    if (me == null) return;
+
+    final granted = await JitsiService.requestCallPermissions();
+    if (!granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Camera and microphone permissions are required.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final jwt = await CallSignalingService.startCall(
+        userId: me.id,
+        conversationId: entry.conversationId,
+        convTitle: entry.convTitle,
+        participants: entry.participants,
+        companyId: me.companyId,
+        isGroup: entry.isGroup,
+      );
+
+      if (jwt == null || jwt.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to start call.')),
+          );
+        }
+        return;
+      }
+
+      final convId = entry.conversationId;
+      final fullName = '${me.firstname} ${me.lastname}'.trim();
+
+      await JitsiService.join(
+        conversationId: convId,
+        jwtToken: jwt,
+        isVideo: isVideo,
+        userName: fullName,
+        userEmail: me.email,
+        userAvatar: me.img,
+        onReadyToClose: () async {
+          try {
+            await CallSignalingService.hangupCall(
+              userId: me.id,
+              userFullName: fullName,
+              conversationId: convId,
+            );
+          } catch (_) {}
+          if (mounted) ref.invalidate(callHistoryProvider);
+        },
+      );
+    } catch (e) {
+      debugPrint('[CallsScreen] Start call failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Call failed: $e')),
+        );
+      }
+    }
   }
 
   void _openConversation(CallHistoryEntry entry) {
@@ -316,13 +385,13 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
             _CallActionButton(
               icon: Icons.phone_rounded,
               color: AppTheme.success,
-              onTap: () => _openConversation(entry),
+              onTap: () => _startCallFromHistory(entry, false),
             ),
             const SizedBox(width: 8),
             _CallActionButton(
               icon: Icons.videocam_rounded,
               color: AppTheme.primary,
-              onTap: () => _openConversation(entry),
+              onTap: () => _startCallFromHistory(entry, true),
             ),
           ],
         ),

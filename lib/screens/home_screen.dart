@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/encryption/encryption_service.dart';
 import '../core/models/conversation_models.dart' show Room;
+import '../features/calls/call_signaling_service.dart';
+import '../features/calls/calls_providers.dart';
+import '../features/calls/jitsi_service.dart';
 import '../features/conversations/conversations_providers.dart';
 import '../features/user/user_providers.dart';
 import '../features/xmpp/xmpp_provider.dart';
 import '../shared/home_screen_header.dart';
 import '../theme/app_theme.dart';
+import '../widgets/incoming_call_overlay.dart';
 import 'chat_screen.dart';
 import 'calls_screen.dart';
 import 'files_screen.dart';
@@ -34,6 +38,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   bool _isFilterDropdownOpen = false;
   String _selectedFilter = 'All';
   OverlayEntry? _filterDropdownOverlay;
+
+  // Tracks an active outgoing/accepted call for cleanup in onReadyToClose.
+  String? _activeCallConvId;
+  String? _activeCallUserId;
+  String? _activeCallUserName;
 
   final List<Widget> _screens = const [
     ChatScreen(),
@@ -134,6 +143,85 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     setState(() {
       _isFilterDropdownOpen = false;
     });
+  }
+
+  // ── Incoming call handling ──────────────────────────────────────────────────
+
+  void _acceptIncomingCall() async {
+    final incoming = ref.read(incomingCallProvider);
+    if (!incoming.hasActiveCall) return;
+
+    final me = ref.read(meProvider).valueOrNull;
+    if (me == null) return;
+
+    ref.read(incomingCallProvider.notifier).dismiss();
+
+    final granted = await JitsiService.requestCallPermissions();
+    if (!granted) return;
+
+    try {
+      final jwt = await CallSignalingService.acceptCall(
+        userId: me.id,
+        conversationId: incoming.conversationId!,
+      );
+
+      if (jwt == null || jwt.isEmpty) return;
+
+      _activeCallConvId = incoming.conversationId;
+      _activeCallUserId = me.id;
+      _activeCallUserName = '${me.firstname} ${me.lastname}'.trim();
+
+      await JitsiService.join(
+        conversationId: incoming.conversationId!,
+        jwtToken: jwt,
+        isVideo: incoming.isVideo,
+        userName: _activeCallUserName!,
+        userEmail: me.email,
+        userAvatar: me.img,
+        onReadyToClose: _onCallEnded,
+      );
+    } catch (e) {
+      debugPrint('[HomeScreen] Accept call failed: $e');
+    }
+  }
+
+  void _declineIncomingCall() async {
+    final incoming = ref.read(incomingCallProvider);
+    if (!incoming.hasActiveCall) return;
+
+    final me = ref.read(meProvider).valueOrNull;
+    ref.read(incomingCallProvider.notifier).dismiss();
+
+    if (me == null) return;
+    try {
+      await CallSignalingService.hangupCall(
+        userId: me.id,
+        userFullName: '${me.firstname} ${me.lastname}'.trim(),
+        conversationId: incoming.conversationId!,
+        endCall: false,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _onCallEnded() async {
+    final convId = _activeCallConvId;
+    final userId = _activeCallUserId;
+    final userName = _activeCallUserName ?? '';
+
+    _activeCallConvId = null;
+    _activeCallUserId = null;
+    _activeCallUserName = null;
+
+    if (convId != null && userId != null) {
+      try {
+        await CallSignalingService.hangupCall(
+          userId: userId,
+          userFullName: userName,
+          conversationId: convId,
+        );
+      } catch (_) {}
+    }
+    if (mounted) ref.invalidate(callHistoryProvider);
   }
 
   String _buildPreview(Map<String, dynamic> data) {
@@ -354,6 +442,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           // to catch up on any changes that arrived while offline.
           ref.invalidate(roomsProvider);
           ref.invalidate(unreadInitProvider);
+
+        case 'jitsi_busy_status':
+          // Incoming call — show overlay only for the callee.
+          final selfId = ref.read(meProvider).value?.id ?? '';
+          final callerId =
+              (data['caller_id'] ?? data['user_id'])?.toString() ?? '';
+          if (callerId.isNotEmpty && callerId != selfId) {
+            ref.read(incomingCallProvider.notifier).show(
+                  IncomingCallState.fromXmppData(data),
+                );
+          }
+
+        case 'jitsi_send_hangup':
+          // Caller cancelled or call ended — dismiss any pending overlay.
+          ref.read(incomingCallProvider.notifier).dismiss();
+          ref.invalidate(callHistoryProvider);
+
+        case 'jitsi_ring_status':
+        case 'jitsi_send_accept':
+        case 'jitsi_user_accept':
+          // Dismiss the incoming overlay once someone accepted on any device.
+          final selfId2 = ref.read(meProvider).value?.id ?? '';
+          final acceptId =
+              (data['user_id'] ?? data['accept_id'])?.toString() ?? '';
+          if (acceptId == selfId2) {
+            ref.read(incomingCallProvider.notifier).dismiss();
+          }
       }
     });
 
@@ -439,6 +554,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
         ),
         if (_isSidebarOpen) HomeSidebar(onClose: _toggleSidebar),
+        // Incoming call overlay — rendered on top of everything.
+        Consumer(
+          builder: (_, ref, __) {
+            final incoming = ref.watch(incomingCallProvider);
+            if (!incoming.hasActiveCall) return const SizedBox.shrink();
+            return IncomingCallOverlay(
+              state: incoming,
+              onAccept: _acceptIncomingCall,
+              onDecline: _declineIncomingCall,
+            );
+          },
+        ),
       ],
     );
   }
