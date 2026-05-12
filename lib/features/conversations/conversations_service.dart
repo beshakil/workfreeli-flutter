@@ -1,6 +1,7 @@
 import '../../core/encryption/encryption_service.dart';
 import '../../core/models/conversation_models.dart';
 import '../../core/network/graphql_client.dart';
+import '../files/file_models.dart' show TagDetails;
 
 export '../../core/models/conversation_models.dart' show Room;
 
@@ -42,6 +43,12 @@ query Messages(\$conversation_id: String!, \$page: Int!) {
         file_size
         key
         location
+        tag_list_details {
+          tag_id
+          title
+          tag_color
+          tag_type
+        }
       }
     }
     pagination {
@@ -72,6 +79,12 @@ mutation SendMsg(\$input: msgInput!) {
         file_size
         key
         location
+        tag_list_details {
+          tag_id
+          title
+          tag_color
+          tag_type
+        }
       }
     }
   }
@@ -315,6 +328,7 @@ class ConversationsService {
   /// [attachFiles] is the curated file-info list returned by
   /// [FilesService.uploadFileRaw]. Each map contains only the fields in the
   /// `allFilesData` GraphQL input type so Apollo Server does not reject them.
+  /// [selectedTags] is an optional list of tags to attach to the files.
   static Future<ChatMessage> sendMessage(
     String roomId,
     String text,
@@ -322,6 +336,7 @@ class ConversationsService {
     String companyId,
     List<String> participants, {
     List<Map<String, dynamic>> attachFiles = const [],
+    List<TagDetails>? selectedTags,
   }) async {
     final encryptedBody = EncryptionService.encrypt(text);
     final hasFiles = attachFiles.isNotEmpty;
@@ -367,6 +382,15 @@ class ConversationsService {
           'videofile': videofile,
           'otherfile': otherfile,
           'allfiles': attachFiles,
+          if (selectedTags != null && selectedTags.isNotEmpty)
+            'tag_list_details': selectedTags
+                .map((t) => {
+                      'tag_id': t.tagId,
+                      'title': t.title,
+                      'tag_color': t.tagColor,
+                      'tag_type': t.tagType,
+                    })
+                .toList(),
         },
     };
 

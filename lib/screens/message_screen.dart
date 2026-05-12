@@ -16,11 +16,13 @@ import '../features/calls/calls_providers.dart';
 import '../features/calls/jitsi_service.dart';
 import '../features/conversations/conversations_providers.dart';
 import '../features/files/files_service.dart';
+import '../features/files/file_models.dart' show TagDetails;
 import '../features/user/user_providers.dart';
 import '../features/xmpp/xmpp_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/image_preview_screen.dart';
 import '../widgets/tag_selection_sheet.dart';
+import '../widgets/file_tags_display.dart';
 import 'chats/chat_action.dart';
 import 'chats/chat_file_action.dart';
 
@@ -265,6 +267,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     }
 
     // If there are files, offer tag selection before sending.
+    List<TagDetails>? selectedTags;
     if (hasPendingFiles) {
       final tags = await showTagSelectionSheet(
         context,
@@ -273,10 +276,13 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
       // null means user dismissed the sheet → abort send.
       if (tags == null) return;
       // tags == [] means "skip tags" → proceed with send.
+      if (tags.isNotEmpty) selectedTags = tags;
     }
 
     _msgController.clear();
-    ref.read(messagesProvider(_args).notifier).sendMessage(text);
+    ref
+        .read(messagesProvider(_args).notifier)
+        .sendMessage(text, selectedTags: selectedTags);
     _scrollToTop();
   }
 
@@ -893,7 +899,7 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: showHeader ? 10 : 3),
+      padding: EdgeInsets.only(bottom: showHeader ? 12 : 10),
       child: message.isSelf ? _selfBubble(context) : _otherBubble(context),
     );
   }
@@ -948,8 +954,8 @@ class _MessageBubble extends StatelessWidget {
   Widget _selfBubble(BuildContext context) {
     return GestureDetector(
       onLongPress: () => _showMessageActions(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
           ConstrainedBox(
             constraints: BoxConstraints(
@@ -957,6 +963,7 @@ class _MessageBubble extends StatelessWidget {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 if (message.hasAttachments)
                   ...message.attachments.map(
@@ -978,24 +985,61 @@ class _MessageBubble extends StatelessWidget {
                         bottomRight: Radius.circular(4),
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          message.msg,
-                          style: AppTheme.bodyMedium
-                              .copyWith(color: Colors.white, height: 1.45),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          message.formattedTime,
-                          style: AppTheme.caption.copyWith(
-                            color: Colors.white.withValues(alpha: 0.7),
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final textStyle = AppTheme.bodyMedium.copyWith(
+                            color: Colors.white, height: 1.45, fontSize: 15);
+                        final tsStyle = AppTheme.caption.copyWith(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 10,
+                        );
+
+                        final textPainter = TextPainter(
+                          text: TextSpan(text: message.msg, style: textStyle),
+                          maxLines: 1,
+                          textDirection: Directionality.of(context),
+                        )..layout();
+                        final tsPainter = TextPainter(
+                          text: TextSpan(
+                              text: message.formattedTime, style: tsStyle),
+                          maxLines: 1,
+                          textDirection: Directionality.of(context),
+                        )..layout();
+
+                        final fitsInline = !textPainter.didExceedMaxLines &&
+                            textPainter.width + 4 + tsPainter.width <=
+                                constraints.maxWidth;
+                        final tsHeight = tsPainter.height;
+
+                        textPainter.dispose();
+                        tsPainter.dispose();
+
+                        if (fitsInline) {
+                          return Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.end,
+                            children: [
+                              Text(message.msg, style: textStyle),
+                              const SizedBox(width: 4),
+                              Text(message.formattedTime, style: tsStyle),
+                            ],
+                          );
+                        }
+
+                        return Stack(
+                          children: [
+                            Padding(
+                              padding: EdgeInsets.only(bottom: tsHeight + 4),
+                              child: Text(message.msg, style: textStyle),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child:
+                                  Text(message.formattedTime, style: tsStyle),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 if (message.msg.isEmpty)
@@ -1018,28 +1062,28 @@ class _MessageBubble extends StatelessWidget {
     return GestureDetector(
       onLongPress: () => _showMessageActions(context),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 34,
+            width: 42,
             child: showHeader
                 ? Container(
-                    width: 30,
-                    height: 30,
+                    width: 38,
+                    height: 38,
                     margin: const EdgeInsets.only(right: 4),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                           colors: colors,
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight),
-                      borderRadius: BorderRadius.circular(15),
+                      borderRadius: BorderRadius.circular(19),
                     ),
                     child: Center(
                       child: Text(
                         message.senderInitials,
                         style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 11,
+                            fontSize: 15,
                             fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -1058,7 +1102,7 @@ class _MessageBubble extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 4),
                     child: Text(
                       message.senderName,
-                      style: AppTheme.bodySmall
+                      style: AppTheme.bodyLarge
                           .copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -1069,7 +1113,8 @@ class _MessageBubble extends StatelessWidget {
                     maxWidth: MediaQuery.of(context).size.width * 0.78,
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       if (message.hasAttachments)
                         ...message.attachments.map(
@@ -1092,41 +1137,75 @@ class _MessageBubble extends StatelessWidget {
                               bottomRight: Radius.circular(16),
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                message.msg,
-                                style:
-                                    AppTheme.bodyMedium.copyWith(height: 1.45),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final textStyle = AppTheme.bodyMedium
+                                  .copyWith(height: 1.45, fontSize: 15);
+                              final tsStyle =
+                                  AppTheme.caption.copyWith(fontSize: 10);
+
+                              final textPainter = TextPainter(
+                                text: TextSpan(
+                                    text: message.msg, style: textStyle),
+                                maxLines: 1,
+                                textDirection: Directionality.of(context),
+                              )..layout();
+                              final tsPainter = TextPainter(
+                                text: TextSpan(
+                                    text: message.formattedTime,
+                                    style: tsStyle),
+                                maxLines: 1,
+                                textDirection: Directionality.of(context),
+                              )..layout();
+
+                              final fitsInline =
+                                  !textPainter.didExceedMaxLines &&
+                                      textPainter.width + 4 + tsPainter.width <=
+                                          constraints.maxWidth;
+                              final tsHeight = tsPainter.height;
+
+                              textPainter.dispose();
+                              tsPainter.dispose();
+
+                              if (fitsInline) {
+                                return Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.end,
+                                  children: [
+                                    Text(message.msg, style: textStyle),
+                                    const SizedBox(width: 4),
+                                    Text(message.formattedTime, style: tsStyle),
+                                  ],
+                                );
+                              }
+
+                              return Stack(
                                 children: [
-                                  Text(
-                                    message.formattedTime,
-                                    style: AppTheme.caption.copyWith(
-                                      fontSize: 10,
-                                    ),
+                                  Padding(
+                                    padding:
+                                        EdgeInsets.only(bottom: tsHeight + 4),
+                                    child: Text(message.msg, style: textStyle),
+                                  ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Text(message.formattedTime,
+                                        style: tsStyle),
                                   ),
                                 ],
-                              ),
-                            ],
+                              );
+                            },
                           ),
                         ),
                       if (message.msg.isEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, right: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text(
-                                message.formattedTime,
-                                style: AppTheme.caption,
-                              ),
-                            ],
+                          child: Align(
+                            alignment: Alignment.bottomRight,
+                            widthFactor: message.hasAttachments ? null : 1.0,
+                            child: Text(
+                              message.formattedTime,
+                              style: AppTheme.caption,
+                            ),
                           ),
                         ),
                     ],
@@ -1319,6 +1398,12 @@ class _AttachmentCard extends StatelessWidget {
               ],
             ),
 
+            // Tag display section
+            if (attachment.tags.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              TagPillsRow(tags: attachment.tags, maxVisible: 3),
+            ],
+
             // Top accent border - separator between file info and actions
             const SizedBox(height: 12),
             Container(
@@ -1383,15 +1468,15 @@ class _AttachmentCard extends StatelessWidget {
             ),
 
             // Status Message (below the card)
-            const SizedBox(height: 10),
-            Text(
-              'File(s) uploaded without any comment or message.',
-              style: AppTheme.caption.copyWith(
-                color: AppTheme.textDim,
-                fontStyle: FontStyle.italic,
-                fontSize: 11,
-              ),
-            ),
+            // const SizedBox(height: 10),
+            // Text(
+            //   'File(s) uploaded without any comment or message.',
+            //   style: AppTheme.caption.copyWith(
+            //     color: AppTheme.textDim,
+            //     fontStyle: FontStyle.italic,
+            //     fontSize: 11,
+            //   ),
+            // ),
 
             // Timestamp (bottom-right)
             const SizedBox(height: 6),
@@ -1598,79 +1683,85 @@ class _ImageThumbnail extends StatelessWidget {
               ],
             ),
 
+            // Tag display section
+            if (attachment.tags.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              TagPillsRow(tags: attachment.tags, maxVisible: 3),
+            ],
+
             // Top accent border - separator between file info and actions
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              height: 1,
-              decoration: BoxDecoration(
-                color: AppTheme.border,
-              ),
-            ),
-            const SizedBox(height: 12),
+            // const SizedBox(height: 12),
+            // Container(
+            //   width: double.infinity,
+            //   height: 1,
+            //   decoration: BoxDecoration(
+            //     color: AppTheme.border,
+            //   ),
+            // ),
+            // const SizedBox(height: 12),
 
             // Bottom action icons (share and expand)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // Share icon
-                GestureDetector(
-                  onTap: () {
-                    // TODO: Implement share action
-                  },
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: AppTheme.bgElevated,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppTheme.border),
-                    ),
-                    child: Icon(
-                      Icons.share_rounded,
-                      size: 16,
-                      color: AppTheme.textDim,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Expand/Full Screen icon
-                GestureDetector(
-                  onTap: onTap,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: isSelf
-                          ? AppTheme.primary.withValues(alpha: 0.1)
-                          : AppTheme.bgElevated,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: isSelf
-                            ? AppTheme.primary.withValues(alpha: 0.3)
-                            : AppTheme.border,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.open_in_full_rounded,
-                      size: 16,
-                      color: isSelf ? AppTheme.primary : AppTheme.textDim,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            // Row(
+            //   mainAxisAlignment: MainAxisAlignment.end,
+            //   children: [
+            //     // Share icon
+            //     GestureDetector(
+            //       onTap: () {
+            //         // TODO: Implement share action
+            //       },
+            //       child: Container(
+            //         width: 28,
+            //         height: 28,
+            //         decoration: BoxDecoration(
+            //           color: AppTheme.bgElevated,
+            //           borderRadius: BorderRadius.circular(6),
+            //           border: Border.all(color: AppTheme.border),
+            //         ),
+            //         child: Icon(
+            //           Icons.share_rounded,
+            //           size: 16,
+            //           color: AppTheme.textDim,
+            //         ),
+            //       ),
+            //     ),
+            //     const SizedBox(width: 8),
+            //     // Expand/Full Screen icon
+            //     GestureDetector(
+            //       onTap: onTap,
+            //       child: Container(
+            //         width: 28,
+            //         height: 28,
+            //         decoration: BoxDecoration(
+            //           color: isSelf
+            //               ? AppTheme.primary.withValues(alpha: 0.1)
+            //               : AppTheme.bgElevated,
+            //           borderRadius: BorderRadius.circular(6),
+            //           border: Border.all(
+            //             color: isSelf
+            //                 ? AppTheme.primary.withValues(alpha: 0.3)
+            //                 : AppTheme.border,
+            //           ),
+            //         ),
+            //         child: Icon(
+            //           Icons.open_in_full_rounded,
+            //           size: 16,
+            //           color: isSelf ? AppTheme.primary : AppTheme.textDim,
+            //         ),
+            //       ),
+            //     ),
+            //   ],
+            // ),
 
             // Status Message (below the card)
-            const SizedBox(height: 10),
-            Text(
-              'File(s) uploaded without any comment or message.',
-              style: AppTheme.caption.copyWith(
-                color: AppTheme.textDim,
-                fontStyle: FontStyle.italic,
-                fontSize: 12,
-              ),
-            ),
+            // const SizedBox(height: 10),
+            // Text(
+            //   'File(s) uploaded without any comment or message.',
+            //   style: AppTheme.caption.copyWith(
+            //     color: AppTheme.textDim,
+            //     fontStyle: FontStyle.italic,
+            //     fontSize: 12,
+            //   ),
+            // ),
 
             // Timestamp (bottom-right)
             const SizedBox(height: 6),

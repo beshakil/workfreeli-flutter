@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 import '../encryption/encryption_service.dart';
+import '../../features/files/file_models.dart';
 
 /// Safe parser (handles String / List / null)
 String _safeString(dynamic value) {
@@ -57,27 +58,26 @@ class Room {
   });
 
   factory Room.fromJson(Map<String, dynamic> json, {String? selfId}) => Room(
-      id: _safeString(json['conversation_id']),
-      title: _safeString(json['title']).isEmpty
-          ? 'Untitled'
-          : _safeString(json['title']),
-      isGroup: _safeString(json['group']) == 'yes',
-      isArchived: _safeString(json['archive']) == 'yes',
-      isClosedFor: _safeString(json['close_for']) == 'yes',
-      isPinned:
-          (json['pin'] as List<dynamic>?)?.contains(selfId) ?? false,
-      isMuted:
-          (json['has_mute'] as List<dynamic>?)?.contains(selfId) ?? false,
-      friendId: _safeString(json['friend_id']),
-      convImg: json['conv_img']?.toString(),
-      lastMsgTime: _safeString(json['last_msg_time']),
-      systemConversation: _safeString(json['system_conversation']),
-      companyId: _safeString(json['company_id']),
-      participants: (json['participants'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
-    );
+        id: _safeString(json['conversation_id']),
+        title: _safeString(json['title']).isEmpty
+            ? 'Untitled'
+            : _safeString(json['title']),
+        isGroup: _safeString(json['group']) == 'yes',
+        isArchived: _safeString(json['archive']) == 'yes',
+        isClosedFor: _safeString(json['close_for']) == 'yes',
+        isPinned: (json['pin'] as List<dynamic>?)?.contains(selfId) ?? false,
+        isMuted:
+            (json['has_mute'] as List<dynamic>?)?.contains(selfId) ?? false,
+        friendId: _safeString(json['friend_id']),
+        convImg: json['conv_img']?.toString(),
+        lastMsgTime: _safeString(json['last_msg_time']),
+        systemConversation: _safeString(json['system_conversation']),
+        companyId: _safeString(json['company_id']),
+        participants: (json['participants'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
+      );
 
   Room copyWith({
     String? title,
@@ -150,6 +150,7 @@ class MessageAttachment {
   final String? fileSize;
   final String? key;
   final String? location;
+  final List<TagDetails> tags;
 
   const MessageAttachment({
     required this.id,
@@ -158,19 +159,39 @@ class MessageAttachment {
     this.fileSize,
     this.key,
     this.location,
+    this.tags = const [],
   });
 
-  factory MessageAttachment.fromJson(Map<String, dynamic> json) =>
-      MessageAttachment(
-        id: _safeString(json['id']),
-        originalName: _safeString(json['originalname']).isEmpty
-            ? 'Unknown file'
-            : _safeString(json['originalname']),
-        fileType: _safeString(json['file_type']),
-        fileSize: _formatSize(json['file_size']),
-        key: json['key']?.toString(),
-        location: json['location']?.toString(),
-      );
+  factory MessageAttachment.fromJson(Map<String, dynamic> json) {
+    // Parse tags - try multiple possible field names from backend
+    List<TagDetails> tags = [];
+
+    // Try 'tag_list_details' first (used by file gallery API)
+    var tagListDetails = json['tag_list_details'] as List<dynamic>?;
+    // Fall back to 'tags' field (common alternative)
+    tagListDetails ??= json['tags'] as List<dynamic>?;
+    // Try 'tag_list' as another fallback
+    tagListDetails ??= json['tag_list'] as List<dynamic>?;
+
+    if (tagListDetails != null) {
+      tags = tagListDetails
+          .whereType<Map<String, dynamic>>()
+          .map((e) => TagDetails.fromJson(e))
+          .toList();
+    }
+
+    return MessageAttachment(
+      id: _safeString(json['id']),
+      originalName: _safeString(json['originalname']).isEmpty
+          ? 'Unknown file'
+          : _safeString(json['originalname']),
+      fileType: _safeString(json['file_type']),
+      fileSize: _formatSize(json['file_size']),
+      key: json['key']?.toString(),
+      location: json['location']?.toString(),
+      tags: tags,
+    );
+  }
 
   String downloadUrl(String baseUrl) {
     if (location != null && location!.startsWith('http')) return location!;
