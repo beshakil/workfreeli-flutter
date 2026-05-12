@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/conversation_models.dart';
+import '../files/file_models.dart' show TagDetails;
 import '../files/files_service.dart';
 import '../user/user_providers.dart';
 import 'conversations_service.dart';
@@ -103,10 +104,8 @@ class RoomPreviewNotifier
     required String preview,
     required String time,
   }) {
-    final full =
-        senderName.isNotEmpty ? '$senderName: $preview' : preview;
-    final truncated =
-        full.length > 80 ? '${full.substring(0, 80)}…' : full;
+    final full = senderName.isNotEmpty ? '$senderName: $preview' : preview;
+    final truncated = full.length > 80 ? '${full.substring(0, 80)}…' : full;
     state = {
       ...state,
       convId: (preview: truncated, time: time),
@@ -124,8 +123,7 @@ final roomPreviewNotifierProvider = StateNotifierProvider<RoomPreviewNotifier,
 /// Merges server rooms with XMPP-driven previews and re-sorts.
 /// Pinned rooms stay first; others are ordered by most-recent message time.
 /// Not autoDispose — mirrors roomsProvider lifetime.
-final sortedRoomsProvider =
-    Provider<AsyncValue<List<Room>>>((ref) {
+final sortedRoomsProvider = Provider<AsyncValue<List<Room>>>((ref) {
   final roomsAsync = ref.watch(roomsProvider);
   final previews = ref.watch(roomPreviewNotifierProvider);
   if (previews.isEmpty) return roomsAsync;
@@ -236,9 +234,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // the DB write races with this read. Deduplicate by msg_id so we never
       // show a message twice.
       final fetchedIds = fetched.map((m) => m.id).toSet();
-      final realtimeOnly = state.messages
-          .where((m) => !fetchedIds.contains(m.id))
-          .toList();
+      final realtimeOnly =
+          state.messages.where((m) => !fetchedIds.contains(m.id)).toList();
       state = state.copyWith(
         messages: [...realtimeOnly, ...fetched],
         isLoading: false,
@@ -278,10 +275,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   /// Deduplicates by msg_id so a rapid refresh + XMPP event don't duplicate.
   void addRealTimeMessage(ChatMessage msg) {
     if (state.messages.any((m) => m.id == msg.id)) {
-      debugPrint('[MessagesNotifier] addRealTimeMessage: duplicate id="${msg.id}" — skipped');
+      debugPrint(
+          '[MessagesNotifier] addRealTimeMessage: duplicate id="${msg.id}" — skipped');
       return;
     }
-    debugPrint('[MessagesNotifier] addRealTimeMessage: prepending id="${msg.id}" sender="${msg.senderId}"');
+    debugPrint(
+        '[MessagesNotifier] addRealTimeMessage: prepending id="${msg.id}" sender="${msg.senderId}"');
     state = state.copyWith(messages: [msg, ...state.messages]);
   }
 
@@ -294,8 +293,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   ) {
     try {
       final convId = data['conversation_id']?.toString() ??
-          data['conv_id']?.toString() ?? '';
-      debugPrint('[parseXmppMessage] convId="$convId" roomId="$roomId" selfId="$selfId"');
+          data['conv_id']?.toString() ??
+          '';
+      debugPrint(
+          '[parseXmppMessage] convId="$convId" roomId="$roomId" selfId="$selfId"');
 
       if (convId.isNotEmpty && convId != roomId) {
         debugPrint('[parseXmppMessage] filtered: wrong room');
@@ -305,7 +306,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final rawBody = data['msg_body']?.toString() ?? '';
       final msgId = (data['msg_id'] ?? data['_id'] ?? '').toString();
       final sender = (data['sender'] ?? data['user_id'] ?? '').toString();
-      debugPrint('[parseXmppMessage] msg_id="$msgId" sender="$sender" bodyLen=${rawBody.length}');
+      debugPrint(
+          '[parseXmppMessage] msg_id="$msgId" sender="$sender" bodyLen=${rawBody.length}');
 
       if (msgId.isEmpty) {
         debugPrint('[parseXmppMessage] empty msg_id — dropping');
@@ -324,7 +326,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       };
 
       final msg = ChatMessage.fromJson(msgMap, selfId: selfId);
-      debugPrint('[parseXmppMessage] built ChatMessage id="${msg.id}" isSelf=${msg.isSelf}');
+      debugPrint(
+          '[parseXmppMessage] built ChatMessage id="${msg.id}" isSelf=${msg.isSelf}');
       return msg;
     } catch (e) {
       debugPrint('[parseXmppMessage] error: $e');
@@ -354,7 +357,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   ///   3. Prepend returned message to the local list.
   ///
   /// On error, pending files are restored so the user can retry.
-  Future<void> sendMessage(String text) async {
+  Future<void> sendMessage(String text,
+      {List<TagDetails>? selectedTags}) async {
     final trimmed = text.trim();
     final filesToSend = List<File>.from(state.pendingFiles);
     if (trimmed.isEmpty && filesToSend.isEmpty) return;
@@ -384,6 +388,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         _companyId,
         _participants,
         attachFiles: uploadedFiles,
+        selectedTags: selectedTags,
       );
 
       // Guard: XMPP echo may have already prepended this message while the
