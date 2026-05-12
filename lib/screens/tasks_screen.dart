@@ -933,14 +933,13 @@ class _CreateTaskFabState extends ConsumerState<_CreateTaskFab> {
             surface: AppTheme.bgCard,
           ),
           dialogTheme: DialogThemeData(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-          ),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16))),
         ),
         child: child!,
       ),
     );
-    if (picked != null) onPicked(picked.toIso8601String());
+    if (picked != null) onPicked(picked.toUtc().toIso8601String());
   }
 
   void _showCreateSheet() {
