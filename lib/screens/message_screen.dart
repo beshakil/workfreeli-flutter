@@ -11,8 +11,12 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../core/config/app_config.dart';
 import '../core/models/conversation_models.dart';
+import '../features/calls/call_signaling_service.dart';
+import '../features/calls/calls_providers.dart';
+import '../features/calls/jitsi_service.dart';
 import '../features/conversations/conversations_providers.dart';
 import '../features/files/files_service.dart';
+import '../features/user/user_providers.dart';
 import '../features/xmpp/xmpp_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/image_preview_screen.dart';
@@ -103,6 +107,73 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 300) {
       _messagesNotifier?.loadMore();
+    }
+  }
+
+  // ── Call initiation ───────────────────────────────────────────────────────
+
+  Future<void> _startCall({required bool isVideo}) async {
+    final me = ref.read(meProvider).valueOrNull;
+    if (me == null) return;
+
+    final granted = await JitsiService.requestCallPermissions();
+    if (!granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Camera and microphone permissions are required.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final jwt = await CallSignalingService.startCall(
+        userId: widget.selfId,
+        conversationId: widget.room.id,
+        convTitle: widget.room.title,
+        participants: widget.room.participants,
+        companyId: widget.room.companyId ?? me.companyId,
+        isGroup: widget.room.isGroup,
+      );
+
+      if (jwt == null || jwt.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to start call.')),
+          );
+        }
+        return;
+      }
+
+      final convId = widget.room.id;
+      final fullName = '${me.firstname} ${me.lastname}'.trim();
+
+      await JitsiService.join(
+        conversationId: convId,
+        jwtToken: jwt,
+        isVideo: isVideo,
+        userName: fullName,
+        userEmail: me.email,
+        userAvatar: me.img,
+        onReadyToClose: () async {
+          try {
+            await CallSignalingService.hangupCall(
+              userId: widget.selfId,
+              userFullName: fullName,
+              conversationId: convId,
+            );
+          } catch (_) {}
+          if (mounted) ref.invalidate(callHistoryProvider);
+        },
+      );
+    } catch (e) {
+      debugPrint('[MessageScreen] Call failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Call failed: $e')),
+        );
+      }
     }
   }
 
@@ -371,6 +442,16 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
               ],
             ),
           ),
+          GestureDetector(
+            onTap: () => _startCall(isVideo: false),
+            child: _iconBtn(Icons.phone_rounded),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: () => _startCall(isVideo: true),
+            child: _iconBtn(Icons.videocam_rounded),
+          ),
+          const SizedBox(width: 6),
           _iconBtn(Icons.search_rounded),
           const SizedBox(width: 6),
           _iconBtn(Icons.more_vert_rounded),

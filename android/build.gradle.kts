@@ -2,6 +2,7 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://github.com/jitsi/jitsi-meet-releases/raw/master/android/sdk/releases") }
     }
 }
 
