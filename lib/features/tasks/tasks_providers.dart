@@ -85,7 +85,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
     required String title,
     required String creatorId,
     required String creatorName,
-    String status = 'not_started',
+    String status = 'Not Started',
     String? priority,
     String? startDate,
     String? endDate,

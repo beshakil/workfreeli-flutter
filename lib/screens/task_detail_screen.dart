@@ -28,6 +28,15 @@ const _statusLabels = {
   'canceled': 'Canceled',
 };
 
+// Maps Flutter internal keys to the status values stored on the server/web.
+const _statusServerValues = {
+  'not_started': 'Not Started',
+  'inprogress': 'In Progress',
+  'completed': 'Completed',
+  'on_hold': 'On Hold',
+  'canceled': 'Canceled',
+};
+
 const _progressValues = [0, 25, 50, 75, 100];
 const _progressLabels = {
   0: 'Not Defined',
@@ -136,7 +145,7 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
     final ok = await ref.read(tasksNotifierProvider.notifier).updateTask(
           id: widget.task.id,
           title: _titleCtrl.text.trim(),
-          status: _status,
+          status: _statusServerValues[_status] ?? _status,
           priority: _priority,
           progress: _progress,
           startDate: _startDate,
@@ -153,6 +162,8 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
     if (ok) {
       setState(() => _dirty = false);
       _snack('Task saved.');
+      // Reload full detail so all fields (checklists, files, discussion) stay fresh.
+      _loadDetail();
     } else {
       _snack(
         ref.read(tasksNotifierProvider).error ?? 'Failed to save task.',
@@ -565,13 +576,78 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
     return Container(
       color: AppTheme.bgCard,
       padding: const EdgeInsets.all(16),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(child: _buildStatusDropdown()),
-          const SizedBox(width: 12),
-          Expanded(child: _buildProgressDropdown()),
+          Row(
+            children: [
+              Expanded(child: _buildStatusDropdown()),
+              const SizedBox(width: 12),
+              Expanded(child: _buildPriorityDropdown()),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildProgressDropdown(),
         ],
       ),
+    );
+  }
+
+  Widget _buildPriorityDropdown() {
+    const priorities = ['low', 'medium', 'high'];
+    const priorityLabels = {
+      'low': 'Low',
+      'medium': 'Medium',
+      'high': 'High',
+    };
+    final priorityColors = {
+      'low': AppTheme.success,
+      'medium': AppTheme.warning,
+      'high': AppTheme.danger,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Priority'),
+        const SizedBox(height: 8),
+        _styledDropdown<String?>(
+          value: _priority,
+          items: [
+            DropdownMenuItem<String?>(
+              value: null,
+              child: Text('None',
+                  style: AppTheme.bodySmall
+                      .copyWith(color: AppTheme.textMuted)),
+            ),
+            ...priorities.map((p) {
+              final color = priorityColors[p] ?? AppTheme.textMuted;
+              return DropdownMenuItem<String?>(
+                value: p,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                          color: color, borderRadius: BorderRadius.circular(4)),
+                    ),
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(priorityLabels[p] ?? p,
+                          style: AppTheme.bodySmall.copyWith(color: color),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+          onChanged: (v) {
+            setState(() => _priority = v);
+            _markDirty();
+          },
+        ),
+      ],
     );
   }
 
