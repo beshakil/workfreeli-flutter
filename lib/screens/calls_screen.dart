@@ -1,39 +1,23 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../features/calls/call_models.dart';
+import '../features/calls/calls_providers.dart';
+import '../features/conversations/conversations_providers.dart';
+import '../features/user/user_providers.dart';
 import '../theme/app_theme.dart';
+import 'message_screen.dart';
 
-// Call log entry model
-class CallLogEntry {
-  final String contactName;
-  final String? avatarUrl;
-  final bool isVideoCall;
-  final CallType callType;
-  final DateTime timestamp;
-  final int callCount;
-  final bool isGroupCall;
-  final int? participantCount;
-
-  CallLogEntry({
-    required this.contactName,
-    this.avatarUrl,
-    required this.isVideoCall,
-    required this.callType,
-    required this.timestamp,
-    this.callCount = 1,
-    this.isGroupCall = false,
-    this.participantCount,
-  });
-}
-
-enum CallType { missed, dialed, received }
-
-class CallsScreen extends StatefulWidget {
+class CallsScreen extends ConsumerStatefulWidget {
   const CallsScreen({super.key});
 
   @override
-  State<CallsScreen> createState() => _CallsScreenState();
+  ConsumerState<CallsScreen> createState() => _CallsScreenState();
 }
 
-class _CallsScreenState extends State<CallsScreen> {
+class _CallsScreenState extends ConsumerState<CallsScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -43,303 +27,31 @@ class _CallsScreenState extends State<CallsScreen> {
     super.dispose();
   }
 
-  List<CallLogEntry> get _demoCalls => [
-        CallLogEntry(
-          contactName: 'Sarah Mitchell',
-          isVideoCall: true,
-          callType: CallType.missed,
-          timestamp: DateTime.now().subtract(const Duration(minutes: 25)),
-        ),
-        CallLogEntry(
-          contactName: 'Project Alpha Team',
-          isVideoCall: true,
-          callType: CallType.received,
-          timestamp:
-              DateTime.now().subtract(const Duration(hours: 1, minutes: 30)),
-          isGroupCall: true,
-          participantCount: 5,
-        ),
-        CallLogEntry(
-          contactName: 'James Rodriguez',
-          isVideoCall: false,
-          callType: CallType.received,
-          timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-        ),
-        CallLogEntry(
-          contactName: 'Emily Chen',
-          isVideoCall: true,
-          callType: CallType.dialed,
-          timestamp:
-              DateTime.now().subtract(const Duration(hours: 3, minutes: 45)),
-        ),
-        CallLogEntry(
-          contactName: 'Michael Thompson',
-          isVideoCall: false,
-          callType: CallType.missed,
-          timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-          callCount: 3,
-        ),
-        CallLogEntry(
-          contactName: 'Design Review Meeting',
-          isVideoCall: true,
-          callType: CallType.dialed,
-          timestamp: DateTime.now().subtract(const Duration(hours: 6)),
-          isGroupCall: true,
-          participantCount: 8,
-        ),
-        CallLogEntry(
-          contactName: 'Olivia Parker',
-          isVideoCall: true,
-          callType: CallType.received,
-          timestamp: DateTime.now().subtract(const Duration(hours: 8)),
-        ),
-        CallLogEntry(
-          contactName: 'David Kim',
-          isVideoCall: false,
-          callType: CallType.dialed,
-          timestamp: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-        ),
-        CallLogEntry(
-          contactName: 'Marketing Team Sync',
-          isVideoCall: false,
-          callType: CallType.missed,
-          timestamp: DateTime.now().subtract(const Duration(days: 1, hours: 4)),
-          isGroupCall: true,
-          participantCount: 6,
-          callCount: 2,
-        ),
-        CallLogEntry(
-          contactName: 'Sophia Anderson',
-          isVideoCall: true,
-          callType: CallType.missed,
-          timestamp: DateTime.now().subtract(const Duration(days: 1, hours: 5)),
-          callCount: 2,
-        ),
-      ];
-
-  String _formatRelativeTime(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays == 1) {
-      return 'Yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
-    } else {
-      return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
-    }
+  Future<void> _refresh() async {
+    ref.invalidate(callHistoryProvider);
+    await ref.read(callHistoryProvider.future);
   }
 
-  String _formatTime(DateTime timestamp) {
-    final hour = timestamp.hour.toString().padLeft(2, '0');
-    final minute = timestamp.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
+  void _openConversation(CallHistoryEntry entry) {
+    final selfId = ref.read(meProvider).valueOrNull?.id ?? '';
+    final rooms = ref.read(sortedRoomsProvider).valueOrNull;
+    final room = rooms?.firstWhere(
+          (r) => r.id == entry.conversationId,
+          orElse: () => entry.toRoom(),
+        ) ??
+        entry.toRoom();
 
-  Color _getCallStatusColor(CallType callType) {
-    switch (callType) {
-      case CallType.missed:
-        return AppTheme.danger;
-      case CallType.dialed:
-      case CallType.received:
-        return AppTheme.success;
-    }
-  }
-
-  IconData _getCallStatusIcon(CallType callType) {
-    switch (callType) {
-      case CallType.missed:
-        return Icons.call_received;
-      case CallType.dialed:
-        return Icons.call_made;
-      case CallType.received:
-        return Icons.call_received;
-    }
-  }
-
-  Widget _buildAvatar(String name, String? avatarUrl, bool isGroupCall) {
-    if (avatarUrl != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(isGroupCall ? 14 : 25),
-        child: CircleAvatar(
-          radius: 25,
-          backgroundImage: NetworkImage(avatarUrl),
-        ),
-      );
-    }
-
-    final initials = name.split(' ').map((e) => e[0]).take(2).join();
-    // Match chat_screen.dart gradient patterns
-    final gradients = [
-      const [Color(0xFF6366F1), Color(0xFF8B5CF6)], // Indigo to Purple
-      const [Color(0xFFEC4899), Color(0xFFF43F5E)], // Pink to Rose
-      const [Color(0xFF3B82F6), Color(0xFF06B6D4)], // Blue to Cyan
-      const [Color(0xFF10B981), Color(0xFF059669)], // Emerald to Green
-      const [Color(0xFFF59E0B), Color(0xFFEF4444)], // Amber to Red
-    ];
-    final gradientIndex = name.hashCode.abs() % gradients.length;
-    final borderRadius = isGroupCall ? 14.0 : 25.0;
-
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradients[gradientIndex],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(borderRadius),
-      ),
-      child: Center(
-        child: Text(
-          initials.toUpperCase(),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCallEntry(CallLogEntry call) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.border, width: 0.5),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          _buildAvatar(call.contactName, call.avatarUrl, call.isGroupCall),
-          const SizedBox(width: 14),
-          // Contact info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          if (call.isGroupCall)
-                            Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.accent.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.group_rounded,
-                                    size: 12,
-                                    color: AppTheme.accent,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    '${call.participantCount}',
-                                    style: AppTheme.caption.copyWith(
-                                      color: AppTheme.accent,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          Expanded(
-                            child: Text(
-                              call.contactName,
-                              style: AppTheme.bodyLarge.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: call.callType == CallType.missed
-                                    ? AppTheme.danger
-                                    : AppTheme.textPrimary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (call.callCount > 1)
-                      Container(
-                        margin: const EdgeInsets.only(left: 6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${call.callCount}',
-                          style: AppTheme.caption.copyWith(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      _getCallStatusIcon(call.callType),
-                      size: 14,
-                      color: _getCallStatusColor(call.callType),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _formatRelativeTime(call.timestamp),
-                      style: AppTheme.bodySmall,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '•',
-                      style: AppTheme.bodySmall,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _formatTime(call.timestamp),
-                      style: AppTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // Call type indicator
-          Icon(
-            call.isVideoCall ? Icons.videocam_rounded : Icons.phone_rounded,
-            size: 20,
-            color: AppTheme.textMuted,
-          ),
-        ],
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MessageScreen(room: room, selfId: selfId),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredCalls = _applySearchFilter(_demoCalls);
+    final callsAsync = ref.watch(callHistoryProvider);
+    final selfId = ref.watch(meProvider).valueOrNull?.id ?? '';
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -347,22 +59,113 @@ class _CallsScreenState extends State<CallsScreen> {
         child: Column(
           children: [
             _buildSearchBar(),
-            // Call log list
             Expanded(
-              child: filteredCalls.isEmpty && _searchQuery.isNotEmpty
-                  ? _buildNoResults()
-                  : ListView.builder(
-                      itemCount: filteredCalls.length,
-                      itemBuilder: (context, index) {
-                        return _buildCallEntry(filteredCalls[index]);
-                      },
+              child: callsAsync.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
+                error: (e, _) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          color: AppTheme.danger, size: 32),
+                      const SizedBox(height: 8),
+                      Text('Failed to load call history',
+                          style: AppTheme.bodySmall),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: _refresh,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+                data: (entries) {
+                  final filtered = _searchQuery.isEmpty
+                      ? entries
+                      : entries
+                          .where((e) => e.convTitle
+                              .toLowerCase()
+                              .contains(_searchQuery.toLowerCase()))
+                          .toList();
+
+                  if (filtered.isEmpty) return _buildEmpty();
+
+                  final sections = _groupByDate(filtered);
+                  return RefreshIndicator(
+                    onRefresh: _refresh,
+                    color: AppTheme.primary,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      itemCount: _flatCount(sections),
+                      itemBuilder: (_, i) =>
+                          _buildFlatItem(sections, i, selfId),
                     ),
+                  );
+                },
+              ),
             ),
           ],
         ),
       ),
     );
   }
+
+  // ── Date grouping ───────────────────────────────────────────────────────────
+
+  List<_Section> _groupByDate(List<CallHistoryEntry> entries) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    final Map<String, List<CallHistoryEntry>> bucket = {};
+    final List<String> order = [];
+
+    for (final e in entries) {
+      final d =
+          DateTime(e.createdAt.year, e.createdAt.month, e.createdAt.day);
+      final String key;
+      if (d == today) {
+        key = 'Today';
+      } else if (d == yesterday) {
+        key = 'Yesterday';
+      } else {
+        key = DateFormat('EEE, MMM d').format(e.createdAt);
+      }
+      if (!bucket.containsKey(key)) {
+        order.add(key);
+        bucket[key] = [];
+      }
+      bucket[key]!.add(e);
+    }
+
+    return order
+        .map((k) => _Section(label: k, entries: bucket[k]!))
+        .toList();
+  }
+
+  int _flatCount(List<_Section> sections) =>
+      sections.fold(0, (sum, s) => sum + 1 + s.entries.length);
+
+  Widget _buildFlatItem(
+      List<_Section> sections, int index, String selfId) {
+    int cursor = 0;
+    for (final section in sections) {
+      if (cursor == index) return _buildDateHeader(section.label);
+      cursor++;
+      for (final entry in section.entries) {
+        if (cursor == index) return _buildCallTile(entry, selfId);
+        cursor++;
+      }
+    }
+    return const SizedBox.shrink();
+  }
+
+  // ── Widgets ─────────────────────────────────────────────────────────────────
 
   Widget _buildSearchBar() {
     return Container(
@@ -381,16 +184,17 @@ class _CallsScreenState extends State<CallsScreen> {
           onChanged: (v) => setState(() => _searchQuery = v),
           decoration: InputDecoration(
             hintText: 'Search calls…',
-            hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textDim),
-            prefixIcon:
-                Icon(Icons.search_rounded, color: AppTheme.textDim, size: 18),
+            hintStyle:
+                AppTheme.bodyMedium.copyWith(color: AppTheme.textDim),
+            prefixIcon: const Icon(Icons.search_rounded,
+                color: AppTheme.textDim, size: 18),
             suffixIcon: _searchQuery.isNotEmpty
                 ? GestureDetector(
                     onTap: () {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
                     },
-                    child: Icon(Icons.close_rounded,
+                    child: const Icon(Icons.close_rounded,
                         color: AppTheme.textDim, size: 18),
                   )
                 : null,
@@ -402,28 +206,287 @@ class _CallsScreenState extends State<CallsScreen> {
     );
   }
 
-  Widget _buildNoResults() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off_rounded, size: 48, color: AppTheme.textDim),
-          const SizedBox(height: 16),
-          Text('No results for "$_searchQuery"',
-              style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-        ],
+  Widget _buildDateHeader(String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        label,
+        style: AppTheme.caption.copyWith(
+          fontWeight: FontWeight.w700,
+          color: AppTheme.textMuted,
+          letterSpacing: 0.4,
+        ),
       ),
     );
   }
 
-  List<CallLogEntry> _applySearchFilter(List<CallLogEntry> calls) {
-    if (_searchQuery.isEmpty) {
-      return calls;
-    }
+  Widget _buildCallTile(CallHistoryEntry entry, String selfId) {
+    final direction = entry.direction(selfId);
+    final isMissed = direction == CallDirection.missed;
 
-    return calls
-        .where((call) =>
-            call.contactName.toLowerCase().contains(_searchQuery.toLowerCase()))
-        .toList();
+    return InkWell(
+      onTap: () => _openConversation(entry),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
+          border: Border(
+            bottom: BorderSide(color: AppTheme.border, width: 0.5),
+          ),
+        ),
+        child: Row(
+          children: [
+            _buildAvatar(entry),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (entry.isGroup) ...[
+                        Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentSoft,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.group_rounded,
+                              size: 12, color: AppTheme.primary),
+                        ),
+                      ],
+                      Expanded(
+                        child: Text(
+                          entry.convTitle,
+                          style: AppTheme.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: isMissed
+                                ? AppTheme.danger
+                                : AppTheme.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _directionIcon(direction),
+                      const SizedBox(width: 4),
+                      Text(
+                        _directionLabel(direction),
+                        style: AppTheme.bodySmall.copyWith(
+                          color: isMissed
+                              ? AppTheme.danger
+                              : AppTheme.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        entry.isVideo
+                            ? Icons.videocam_rounded
+                            : Icons.phone_rounded,
+                        size: 13,
+                        color: AppTheme.textDim,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatTime(entry.createdAt),
+                        style: AppTheme.caption,
+                      ),
+                      if (entry.callDuration.isNotEmpty) ...[
+                        Text(' · ', style: AppTheme.caption),
+                        Text(
+                          entry.callDuration,
+                          style: AppTheme.caption,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _CallActionButton(
+              icon: Icons.phone_rounded,
+              color: AppTheme.success,
+              onTap: () => _openConversation(entry),
+            ),
+            const SizedBox(width: 8),
+            _CallActionButton(
+              icon: Icons.videocam_rounded,
+              color: AppTheme.primary,
+              onTap: () => _openConversation(entry),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(CallHistoryEntry entry) {
+    final img = entry.convImg;
+    final hasValidUrl = img != null &&
+        img.isNotEmpty &&
+        (img.startsWith('http://') || img.startsWith('https://'));
+
+    final radius = entry.isGroup ? 14.0 : 25.0;
+
+    if (hasValidUrl) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: CachedNetworkImage(
+          imageUrl: img,
+          width: 50,
+          height: 50,
+          fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => _initialsAvatar(entry, radius),
+        ),
+      );
+    }
+    return _initialsAvatar(entry, radius);
+  }
+
+  Widget _initialsAvatar(CallHistoryEntry entry, double radius) {
+    const palettes = [
+      [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+      [Color(0xFFEC4899), Color(0xFFF43F5E)],
+      [Color(0xFF3B82F6), Color(0xFF06B6D4)],
+      [Color(0xFF10B981), Color(0xFF059669)],
+      [Color(0xFFF59E0B), Color(0xFFEF4444)],
+    ];
+    final colors = palettes[entry.convTitle.hashCode.abs() % palettes.length];
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      child: Center(
+        child: Text(
+          entry.initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _directionIcon(CallDirection direction) {
+    switch (direction) {
+      case CallDirection.incoming:
+        return const Icon(Icons.call_received_rounded,
+            size: 14, color: AppTheme.success);
+      case CallDirection.outgoing:
+        return const Icon(Icons.call_made_rounded,
+            size: 14, color: AppTheme.success);
+      case CallDirection.missed:
+        return const Icon(Icons.call_missed_rounded,
+            size: 14, color: AppTheme.danger);
+    }
+  }
+
+  String _directionLabel(CallDirection direction) {
+    switch (direction) {
+      case CallDirection.incoming:
+        return 'Incoming';
+      case CallDirection.outgoing:
+        return 'Outgoing';
+      case CallDirection.missed:
+        return 'Missed';
+    }
+  }
+
+  String _formatTime(DateTime dt) {
+    final h = dt.hour == 0
+        ? 12
+        : dt.hour > 12
+            ? dt.hour - 12
+            : dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final suffix = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$m $suffix';
+  }
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _searchQuery.isNotEmpty
+                ? Icons.search_off_rounded
+                : Icons.phone_missed_rounded,
+            size: 52,
+            color: AppTheme.textDim,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _searchQuery.isNotEmpty
+                ? 'No results for "$_searchQuery"'
+                : 'No call history yet',
+            style:
+                AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+          ),
+          if (_searchQuery.isEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Your call history will appear here',
+              style: AppTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Supporting types ──────────────────────────────────────────────────────────
+
+class _Section {
+  const _Section({required this.label, required this.entries});
+  final String label;
+  final List<CallHistoryEntry> entries;
+}
+
+class _CallActionButton extends StatelessWidget {
+  const _CallActionButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 16, color: color),
+      ),
+    );
   }
 }

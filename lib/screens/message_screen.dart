@@ -591,14 +591,11 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
         final next = index + 1 < state.messages.length
             ? state.messages[index + 1]
             : null;
-        final prev = index > 0 ? state.messages[index - 1] : null;
         final showHeader = next == null || next.senderId != msg.senderId;
-        final showTime = prev == null || prev.senderId != msg.senderId;
 
         return _MessageBubble(
           message: msg,
           showHeader: showHeader,
-          showTime: showTime,
           onOpenAttachment: _onOpenAttachment,
         );
       },
@@ -798,13 +795,11 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.showHeader,
-    required this.showTime,
     required this.onOpenAttachment,
   });
 
   final ChatMessage message;
   final bool showHeader;
-  final bool showTime;
   final void Function(ChatMessage, MessageAttachment) onOpenAttachment;
 
   static const List<List<Color>> _senderColors = [
@@ -870,14 +865,15 @@ class _MessageBubble extends StatelessWidget {
   }
 
   Widget _selfBubble(BuildContext context) {
-    final maxW = MediaQuery.of(context).size.width * 0.78;
     return GestureDetector(
       onLongPress: () => _showMessageActions(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxW),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.78,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -901,22 +897,34 @@ class _MessageBubble extends StatelessWidget {
                         bottomRight: Radius.circular(4),
                       ),
                     ),
-                    child: Text(
-                      message.msg,
-                      style: AppTheme.bodyMedium
-                          .copyWith(color: Colors.white, height: 1.45),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          message.msg,
+                          style: AppTheme.bodyMedium
+                              .copyWith(color: Colors.white, height: 1.45),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          message.formattedTime,
+                          style: AppTheme.caption.copyWith(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                if (message.msg.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, right: 4),
+                    child: Text(message.formattedTime, style: AppTheme.caption),
                   ),
               ],
             ),
           ),
-          if (showTime) ...[
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Text(message.formattedTime, style: AppTheme.caption),
-            ),
-          ],
         ],
       ),
     );
@@ -925,7 +933,6 @@ class _MessageBubble extends StatelessWidget {
   Widget _otherBubble(BuildContext context) {
     final colors =
         _senderColors[message.senderId.hashCode.abs() % _senderColors.length];
-    final maxW = MediaQuery.of(context).size.width * 0.78;
 
     return GestureDetector(
       onLongPress: () => _showMessageActions(context),
@@ -959,26 +966,27 @@ class _MessageBubble extends StatelessWidget {
                 : null,
           ),
           const SizedBox(width: 4),
-          Expanded(
+          // Use Flexible (loose) so bubble widths auto-size to content length
+          Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 if (showHeader) ...[
-                  Row(
-                    children: [
-                      Text(
-                        message.senderName,
-                        style: AppTheme.bodySmall
-                            .copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(message.formattedTime, style: AppTheme.caption),
-                    ],
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      message.senderName,
+                      style: AppTheme.bodySmall
+                          .copyWith(fontWeight: FontWeight.w600),
+                    ),
                   ),
                   const SizedBox(height: 4),
                 ],
                 ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxW),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.78,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1003,9 +1011,41 @@ class _MessageBubble extends StatelessWidget {
                               bottomRight: Radius.circular(16),
                             ),
                           ),
-                          child: Text(
-                            message.msg,
-                            style: AppTheme.bodyMedium.copyWith(height: 1.45),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                message.msg,
+                                style:
+                                    AppTheme.bodyMedium.copyWith(height: 1.45),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    message.formattedTime,
+                                    style: AppTheme.caption.copyWith(
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (message.msg.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, right: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text(
+                                message.formattedTime,
+                                style: AppTheme.caption,
+                              ),
+                            ],
                           ),
                         ),
                     ],
@@ -1086,11 +1126,11 @@ class _AttachmentCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Main card content
+            // Main card content - File info with star icon
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // File Icon (blue square rounded icon with thumbnail)
+                // File Icon
                 Container(
                   width: 48,
                   height: 48,
@@ -1100,13 +1140,41 @@ class _AttachmentCard extends StatelessWidget {
                     border: Border.all(
                         color: iconColor.withValues(alpha: 0.3), width: 1),
                   ),
-                  child: Center(
-                    child: Icon(
-                      _getFileIcon(type),
-                      color: iconColor,
-                      size: 24,
-                    ),
-                  ),
+                  child: attachment.isImage
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: CachedNetworkImage(
+                            imageUrl:
+                                attachment.downloadUrl(AppConfig.fileBaseUrl),
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: iconColor.withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Center(
+                              child: Icon(
+                                _getFileIcon(type),
+                                color: iconColor,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Icon(
+                            _getFileIcon(type),
+                            color: iconColor,
+                            size: 24,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 12),
 
@@ -1115,15 +1183,42 @@ class _AttachmentCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        attachment.originalName,
-                        style: AppTheme.bodyMedium.copyWith(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              attachment.originalName,
+                              style: AppTheme.bodyMedium.copyWith(
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Star/Favorite icon (top-right)
+                          GestureDetector(
+                            onTap: () {
+                              // TODO: Implement star/favorite action
+                            },
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgElevated,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppTheme.border),
+                              ),
+                              child: Icon(
+                                Icons.star_border_rounded,
+                                size: 16,
+                                color: AppTheme.textDim,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       if (attachment.fileSize != null &&
                           attachment.fileSize!.isNotEmpty) ...[
@@ -1140,61 +1235,46 @@ class _AttachmentCard extends StatelessWidget {
                     ],
                   ),
                 ),
+              ],
+            ),
 
-                const SizedBox(width: 8),
+            // Top accent border - separator between file info and actions
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              height: 2.5,
+              decoration: BoxDecoration(
+                color: AppTheme.border,
+              ),
+            ),
+            const SizedBox(height: 12),
 
-                // Action Icons (star, share, expand)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Star/Favorite icon (top-right)
-                    GestureDetector(
-                      onTap: () {
-                        // TODO: Implement star/favorite action
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: AppTheme.bgElevated,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.border),
-                        ),
-                        child: Icon(
-                          Icons.star_border_rounded,
-                          size: 16,
-                          color: AppTheme.textDim,
-                        ),
-                      ),
+            // Bottom action icons (share and expand)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Share icon
+                GestureDetector(
+                  onTap: () {
+                    // TODO: Implement share action
+                  },
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgElevated,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.border),
                     ),
-                    const SizedBox(height: 6),
-
-                    // Share icon (bottom-right)
-                    GestureDetector(
-                      onTap: () {
-                        // TODO: Implement share action
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: AppTheme.bgElevated,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.border),
-                        ),
-                        child: Icon(
-                          Icons.share_rounded,
-                          size: 16,
-                          color: AppTheme.textDim,
-                        ),
-                      ),
+                    child: Icon(
+                      Icons.share_rounded,
+                      size: 16,
+                      color: AppTheme.textDim,
                     ),
-                  ],
+                  ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // Expand/Full Screen icon (right)
+                // Expand/Full Screen icon
                 GestureDetector(
                   onTap: onTap,
                   child: Container(
@@ -1334,28 +1414,11 @@ class _ImageThumbnail extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image thumbnail preview
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: url.isEmpty
-                  ? _placeholder(double.infinity)
-                  : CachedNetworkImage(
-                      imageUrl: url,
-                      width: double.infinity,
-                      height: 180,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => _placeholder(double.infinity),
-                      errorWidget: (_, __, ___) =>
-                          _errorWidget(double.infinity),
-                    ),
-            ),
-            const SizedBox(height: 12),
-
             // Main card content
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // File Icon (blue square rounded icon)
+                // File Icon
                 Container(
                   width: 48,
                   height: 48,
@@ -1365,11 +1428,30 @@ class _ImageThumbnail extends StatelessWidget {
                     border: Border.all(
                         color: iconColor.withValues(alpha: 0.3), width: 1),
                   ),
-                  child: Center(
-                    child: Icon(
-                      Icons.image_rounded,
-                      color: iconColor,
-                      size: 24,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: CachedNetworkImage(
+                      imageUrl: attachment.downloadUrl(AppConfig.fileBaseUrl),
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: iconColor.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Center(
+                        child: Icon(
+                          Icons.image_rounded,
+                          color: iconColor,
+                          size: 24,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1380,15 +1462,42 @@ class _ImageThumbnail extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        attachment.originalName,
-                        style: AppTheme.bodyMedium.copyWith(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              attachment.originalName,
+                              style: AppTheme.bodyMedium.copyWith(
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Star/Favorite icon (top-right)
+                          GestureDetector(
+                            onTap: () {
+                              // TODO: Implement star/favorite action
+                            },
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgElevated,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppTheme.border),
+                              ),
+                              child: Icon(
+                                Icons.star_border_rounded,
+                                size: 16,
+                                color: AppTheme.textDim,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       if (attachment.fileSize != null &&
                           attachment.fileSize!.isNotEmpty) ...[
@@ -1405,61 +1514,46 @@ class _ImageThumbnail extends StatelessWidget {
                     ],
                   ),
                 ),
+              ],
+            ),
 
-                const SizedBox(width: 8),
+            // Top accent border - separator between file info and actions
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              height: 1,
+              decoration: BoxDecoration(
+                color: AppTheme.border,
+              ),
+            ),
+            const SizedBox(height: 12),
 
-                // Action Icons (star, share, expand)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Star/Favorite icon (top-right)
-                    GestureDetector(
-                      onTap: () {
-                        // TODO: Implement star/favorite action
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: AppTheme.bgElevated,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.border),
-                        ),
-                        child: Icon(
-                          Icons.star_border_rounded,
-                          size: 16,
-                          color: AppTheme.textDim,
-                        ),
-                      ),
+            // Bottom action icons (share and expand)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Share icon
+                GestureDetector(
+                  onTap: () {
+                    // TODO: Implement share action
+                  },
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgElevated,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.border),
                     ),
-                    const SizedBox(height: 6),
-
-                    // Share icon (bottom-right)
-                    GestureDetector(
-                      onTap: () {
-                        // TODO: Implement share action
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: AppTheme.bgElevated,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.border),
-                        ),
-                        child: Icon(
-                          Icons.share_rounded,
-                          size: 16,
-                          color: AppTheme.textDim,
-                        ),
-                      ),
+                    child: Icon(
+                      Icons.share_rounded,
+                      size: 16,
+                      color: AppTheme.textDim,
                     ),
-                  ],
+                  ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // Expand/Full Screen icon (right)
+                // Expand/Full Screen icon
                 GestureDetector(
                   onTap: onTap,
                   child: Container(
@@ -1493,7 +1587,7 @@ class _ImageThumbnail extends StatelessWidget {
               style: AppTheme.caption.copyWith(
                 color: AppTheme.textDim,
                 fontStyle: FontStyle.italic,
-                fontSize: 11,
+                fontSize: 12,
               ),
             ),
 
