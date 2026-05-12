@@ -842,6 +842,7 @@ class _MessageBubble extends StatelessWidget {
         isSelf: isSelf,
         onTap: () => onOpenAttachment(message, a),
         onLongPress: () => _showFileActions(context, a),
+        message: message,
       );
     }
     return _AttachmentCard(
@@ -849,6 +850,7 @@ class _MessageBubble extends StatelessWidget {
       isSelf: isSelf,
       onTap: () => onOpenAttachment(message, a),
       onLongPress: () => _showFileActions(context, a),
+      message: message,
     );
   }
 
@@ -1025,12 +1027,14 @@ class _AttachmentCard extends StatelessWidget {
     required this.attachment,
     required this.isSelf,
     required this.onTap,
+    required this.message,
     this.onLongPress,
   });
 
   final MessageAttachment attachment;
   final bool isSelf;
   final VoidCallback onTap;
+  final ChatMessage message;
   final VoidCallback? onLongPress;
 
   static const Map<String, List<Color>> _typeColors = {
@@ -1061,16 +1065,12 @@ class _AttachmentCard extends StatelessWidget {
         ? AppTheme.primary.withValues(alpha: 0.3)
         : AppTheme.border.withValues(alpha: 0.6);
 
-    // For images, show a thumbnail hint via the type label.
-    final isImage = attachment.isImage;
-    final actionIcon = isImage ? Icons.zoom_in_rounded : Icons.download_rounded;
-
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(12),
@@ -1083,95 +1083,200 @@ class _AttachmentCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // File type icon
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: iconColor.withValues(alpha: 0.3), width: 1),
-              ),
-              child: Center(
-                child: Text(
-                  type,
-                  style: TextStyle(
-                    color: iconColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
+            // Main card content
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // File Icon (blue square rounded icon with thumbnail)
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: iconBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: iconColor.withValues(alpha: 0.3), width: 1),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      _getFileIcon(type),
+                      color: iconColor,
+                      size: 24,
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // File name & size
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    attachment.originalName,
-                    style: AppTheme.bodySmall.copyWith(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (attachment.fileSize != null &&
-                      attachment.fileSize!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.insert_drive_file_rounded,
-                            size: 12, color: AppTheme.textDim),
-                        const SizedBox(width: 4),
+                const SizedBox(width: 12),
+
+                // Text Information (file name & size)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        attachment.originalName,
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (attachment.fileSize != null &&
+                          attachment.fileSize!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
                         Text(
                           attachment.fileSize!,
                           style: AppTheme.caption.copyWith(
-                              color: AppTheme.textDim,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 12),
+                            color: AppTheme.textDim,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Action Icons (star, share, expand)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Star/Favorite icon (top-right)
+                    GestureDetector(
+                      onTap: () {
+                        // TODO: Implement star/favorite action
+                      },
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgElevated,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: Icon(
+                          Icons.star_border_rounded,
+                          size: 16,
+                          color: AppTheme.textDim,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Share icon (bottom-right)
+                    GestureDetector(
+                      onTap: () {
+                        // TODO: Implement share action
+                      },
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgElevated,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: Icon(
+                          Icons.share_rounded,
+                          size: 16,
+                          color: AppTheme.textDim,
+                        ),
+                      ),
                     ),
                   ],
-                ],
+                ),
+
+                const SizedBox(width: 8),
+
+                // Expand/Full Screen icon (right)
+                GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: isSelf
+                          ? AppTheme.primary.withValues(alpha: 0.1)
+                          : AppTheme.bgElevated,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isSelf
+                            ? AppTheme.primary.withValues(alpha: 0.3)
+                            : AppTheme.border,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.open_in_full_rounded,
+                      size: 16,
+                      color: isSelf ? AppTheme.primary : AppTheme.textDim,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Status Message (below the card)
+            const SizedBox(height: 10),
+            Text(
+              'File(s) uploaded without any comment or message.',
+              style: AppTheme.caption.copyWith(
+                color: AppTheme.textDim,
+                fontStyle: FontStyle.italic,
+                fontSize: 11,
               ),
             ),
-            const SizedBox(width: 10),
-            // Action icon (zoom for images, download for docs)
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isSelf
-                    ? AppTheme.primary.withValues(alpha: 0.08)
-                    : AppTheme.bgElevated.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isSelf
-                      ? AppTheme.primary.withValues(alpha: 0.2)
-                      : AppTheme.border.withValues(alpha: 0.4),
-                  width: 1,
+
+            // Timestamp (bottom-right)
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  message.formattedTime,
+                  style: AppTheme.caption.copyWith(
+                    color: AppTheme.textDim,
+                    fontSize: 11,
+                  ),
                 ),
-              ),
-              child: Icon(
-                actionIcon,
-                size: 18,
-                color: isSelf ? AppTheme.primary : AppTheme.textDim,
-              ),
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  IconData _getFileIcon(String type) {
+    switch (type.toUpperCase()) {
+      case 'PDF':
+        return Icons.picture_as_pdf_rounded;
+      case 'DOC':
+      case 'DOCX':
+        return Icons.description_rounded;
+      case 'XLS':
+      case 'XLSX':
+        return Icons.table_chart_rounded;
+      case 'PNG':
+      case 'JPG':
+      case 'JPEG':
+      case 'WEBP':
+      case 'GIF':
+        return Icons.image_rounded;
+      case 'ZIP':
+        return Icons.folder_zip_rounded;
+      case 'MP4':
+        return Icons.video_library_rounded;
+      case 'MP3':
+        return Icons.audio_file_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
   }
 }
 
@@ -1184,33 +1289,230 @@ class _ImageThumbnail extends StatelessWidget {
     required this.attachment,
     required this.isSelf,
     required this.onTap,
+    required this.message,
     this.onLongPress,
   });
 
   final MessageAttachment attachment;
   final bool isSelf;
   final VoidCallback onTap;
+  final ChatMessage message;
   final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final url = attachment.downloadUrl(AppConfig.fileBaseUrl);
     final maxW = MediaQuery.of(context).size.width * 0.65;
+    final type = attachment.displayType;
+    final colors = _AttachmentCard._typeColors[type] ??
+        [AppTheme.primary, AppTheme.bgElevated, AppTheme.textDim];
+    final (iconColor, iconBg) = (colors[0], colors[1]);
+
+    const cardBg = AppTheme.bgCard;
+    final borderColor = isSelf
+        ? AppTheme.primary.withValues(alpha: 0.3)
+        : AppTheme.border.withValues(alpha: 0.6);
 
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: url.isEmpty
-            ? _placeholder(maxW)
-            : CachedNetworkImage(
-                imageUrl: url,
-                width: maxW,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => _placeholder(maxW),
-                errorWidget: (_, __, ___) => _errorWidget(maxW),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image thumbnail preview
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: url.isEmpty
+                  ? _placeholder(double.infinity)
+                  : CachedNetworkImage(
+                      imageUrl: url,
+                      width: double.infinity,
+                      height: 180,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => _placeholder(double.infinity),
+                      errorWidget: (_, __, ___) =>
+                          _errorWidget(double.infinity),
+                    ),
+            ),
+            const SizedBox(height: 12),
+
+            // Main card content
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // File Icon (blue square rounded icon)
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: iconBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: iconColor.withValues(alpha: 0.3), width: 1),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.image_rounded,
+                      color: iconColor,
+                      size: 24,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Text Information (file name & size)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        attachment.originalName,
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (attachment.fileSize != null &&
+                          attachment.fileSize!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          attachment.fileSize!,
+                          style: AppTheme.caption.copyWith(
+                            color: AppTheme.textDim,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Action Icons (star, share, expand)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Star/Favorite icon (top-right)
+                    GestureDetector(
+                      onTap: () {
+                        // TODO: Implement star/favorite action
+                      },
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgElevated,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: Icon(
+                          Icons.star_border_rounded,
+                          size: 16,
+                          color: AppTheme.textDim,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Share icon (bottom-right)
+                    GestureDetector(
+                      onTap: () {
+                        // TODO: Implement share action
+                      },
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgElevated,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: Icon(
+                          Icons.share_rounded,
+                          size: 16,
+                          color: AppTheme.textDim,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(width: 8),
+
+                // Expand/Full Screen icon (right)
+                GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: isSelf
+                          ? AppTheme.primary.withValues(alpha: 0.1)
+                          : AppTheme.bgElevated,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isSelf
+                            ? AppTheme.primary.withValues(alpha: 0.3)
+                            : AppTheme.border,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.open_in_full_rounded,
+                      size: 16,
+                      color: isSelf ? AppTheme.primary : AppTheme.textDim,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Status Message (below the card)
+            const SizedBox(height: 10),
+            Text(
+              'File(s) uploaded without any comment or message.',
+              style: AppTheme.caption.copyWith(
+                color: AppTheme.textDim,
+                fontStyle: FontStyle.italic,
+                fontSize: 11,
               ),
+            ),
+
+            // Timestamp (bottom-right)
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  message.formattedTime,
+                  style: AppTheme.caption.copyWith(
+                    color: AppTheme.textDim,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
