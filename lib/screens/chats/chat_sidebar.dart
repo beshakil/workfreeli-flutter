@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 
-import '../../core/config/app_config.dart';
 import '../../core/models/conversation_models.dart';
 
 class ChatSidebar extends StatefulWidget {
@@ -134,9 +133,13 @@ class _ChatSidebarState extends State<ChatSidebar> {
   Widget _buildRoomAvatar() {
     final colors = _avatarColors(widget.room.id);
     final isGroup = widget.room.isGroup;
+    final img = widget.room.convImg;
+    final hasValidUrl = img != null &&
+        img.isNotEmpty &&
+        (img.startsWith('http://') || img.startsWith('https://'));
 
-    // If room has an image, display it with error handling
-    if (widget.room.convImg != null && widget.room.convImg!.isNotEmpty) {
+    // If room has a valid image URL, display it
+    if (hasValidUrl) {
       return Container(
         width: 48,
         height: 48,
@@ -148,7 +151,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
           borderRadius:
               isGroup ? BorderRadius.circular(11) : BorderRadius.circular(24),
           child: CachedNetworkImage(
-            imageUrl: '${AppConfig.fileBaseUrl}${widget.room.convImg}',
+            imageUrl: img,
             fit: BoxFit.cover,
             placeholder: (context, url) => Container(
               color: colors[0],

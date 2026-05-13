@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -43,6 +44,10 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
 
   bool _hasText = false;
   bool _showChatSidebar = false;
+  bool _showDateChip = false;
+  String _currentDateChip = '';
+  Timer? _dateChipHideTimer;
+  bool _showScrollButton = false;
 
   StreamSubscription<XmppEvent>? _xmppSub;
 
@@ -88,6 +93,9 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
       ref.read(unreadCountsProvider.notifier).reset(widget.room.id);
       // Tell the backend the user has read all messages.
       ConversationsService.readAll(widget.room.id).catchError((_) {});
+
+      // Compute initial date chip so it's ready when user scrolls.
+      _updateDateChip();
     });
   }
 
@@ -95,6 +103,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   void dispose() {
     _msgController.removeListener(_onTextChanged);
     _xmppSub?.cancel();
+    _dateChipHideTimer?.cancel();
     debugPrint(
         '[MessageScreen] XMPP subscription cancelled for room ${widget.room.id}');
 
@@ -118,9 +127,91 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   }
 
   void _onScroll() {
+    if (_scrollController.hasClients) {
+      final position = _scrollController.position;
+      // With reverse=true:
+      // - pixels = 0 → bottom of list (newest messages)
+      // - pixels = maxScrollExtent → top of list (oldest messages)
+      // When user scrolls UP to see old messages, pixels INCREASE
+      final isAtBottom = position.pixels <= 50; // At newest messages
+      final showButton = position.pixels > 200 && !isAtBottom; // Show when viewing old messages
+      
+      if (showButton != _showScrollButton) {
+        setState(() {
+          _showScrollButton = showButton;
+        });
+      }
+    }
+
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 300) {
       _messagesNotifier?.loadMore();
+    }
+  }
+
+  void _updateDateChip() {
+    if (!mounted || !_scrollController.hasClients) return;
+
+    final state = ref.read(messagesProvider(_args));
+    if (state.messages.isEmpty) return;
+
+    final scrollOffset = _scrollController.offset;
+    final viewportHeight = _scrollController.position.viewportDimension;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+
+    // With reverse=true, item 0 (newest) is at the BOTTOM.
+    // scrollOffset increases as we scroll toward older messages.
+    //
+    // totalContentExtent = maxScroll + viewportHeight
+    // progress through content = (scrollOffset + viewportOffset) / totalContentExtent
+    // message index ≈ progress * (messageCount - 1)
+    int targetIndex;
+    if (maxScroll <= 0) {
+      // All messages fit — oldest is the last one.
+      targetIndex = state.messages.length - 1;
+    } else {
+      final totalContentExtent = maxScroll + viewportHeight;
+      // Look near the top of the viewport (oldest visible messages)
+      final viewportOffset = viewportHeight * 0.8;
+      final targetPosition = scrollOffset + viewportOffset;
+      final progress =
+          (targetPosition / totalContentExtent).clamp(0.0, 1.0);
+      targetIndex = (progress * (state.messages.length - 1)).round();
+    }
+
+    targetIndex = targetIndex.clamp(0, state.messages.length - 1);
+
+    final msg = state.messages[targetIndex];
+    final dateLabel = _formatDateChip(msg.createdAt);
+
+    if (dateLabel != _currentDateChip || !_showDateChip) {
+      setState(() {
+        _currentDateChip = dateLabel;
+        _showDateChip = true;
+      });
+    }
+  }
+
+  String _formatDateChip(String createdAt) {
+    try {
+      final dt = DateTime.tryParse(createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(int.tryParse(createdAt) ?? 0);
+      final localDt = dt.toLocal();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final messageDay = DateTime(localDt.year, localDt.month, localDt.day);
+      final diff = today.difference(messageDay).inDays;
+
+      if (diff == 0) return 'Today';
+      if (diff == 1) return 'Yesterday';
+      if (diff < 7) {
+        // Show day name (Monday, Tuesday, etc.)
+        return DateFormat('EEEE').format(localDt);
+      }
+      // Show full date
+      return DateFormat('dd MMM yyyy').format(localDt);
+    } catch (_) {
+      return 'Today';
     }
   }
 
@@ -267,6 +358,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   }
 
   void _scrollToTop() {
+    // With reverse=true, pixel 0 is the BOTTOM (newest messages)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -277,6 +369,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
       }
     });
   }
+
 
   // ── File download helper (used by _AttachmentCard) ──────────────────────
 
@@ -355,6 +448,10 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
               ),
             ],
           ),
+          // Floating date chip
+          if (_showDateChip && _currentDateChip.isNotEmpty) _buildDateChip(),
+          // Floating scroll button
+          if (_showScrollButton) _buildScrollButton(),
           // Chat Sidebar
           if (_showChatSidebar)
             ChatSidebar(
@@ -366,6 +463,81 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
               room: widget.room,
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDateChip() {
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 60,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: AnimatedOpacity(
+          opacity: _showDateChip ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 200),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.bgCard,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              _currentDateChip,
+              style: AppTheme.bodySmall.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScrollButton() {
+    return Positioned(
+      bottom: 100,
+      right: 16,
+      child: AnimatedOpacity(
+        opacity: _showScrollButton ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _scrollToTop, // Scrolls to newest messages (bottom with reverse=true)
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.arrow_downward_rounded,
+                color: AppTheme.primary,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -723,41 +895,61 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
       );
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      reverse: true,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      itemCount: state.messages.length + (state.hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == state.messages.length) {
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Center(
-              child: state.isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppTheme.primary),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          );
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        // Update date chip on any scroll movement
+        if (notification is ScrollUpdateNotification ||
+            notification is OverscrollNotification ||
+            notification is UserScrollNotification ||
+            notification is ScrollEndNotification) {
+          _updateDateChip();
+
+          // Reset hide timer on scroll
+          _dateChipHideTimer?.cancel();
+          _dateChipHideTimer = Timer(const Duration(seconds: 2), () {
+            if (mounted) {
+              setState(() => _showDateChip = false);
+            }
+          });
         }
-
-        final msg = state.messages[index];
-        final next = index + 1 < state.messages.length
-            ? state.messages[index + 1]
-            : null;
-        final showHeader = next == null || next.senderId != msg.senderId;
-
-        return _MessageBubble(
-          message: msg,
-          showHeader: showHeader,
-          onOpenAttachment: _onOpenAttachment,
-          onShowUserProfile: _showUserProfile,
-        );
+        return false;
       },
+      child: ListView.builder(
+        controller: _scrollController,
+        reverse: true,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        itemCount: state.messages.length + (state.hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == state.messages.length) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: state.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppTheme.primary),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            );
+          }
+
+          final msg = state.messages[index];
+          final next = index + 1 < state.messages.length
+              ? state.messages[index + 1]
+              : null;
+          final showHeader = next == null || next.senderId != msg.senderId;
+
+          return _MessageBubble(
+            message: msg,
+            showHeader: showHeader,
+            onOpenAttachment: _onOpenAttachment,
+            onShowUserProfile: _showUserProfile,
+          );
+        },
+      ),
     );
   }
 
