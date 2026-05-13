@@ -20,7 +20,7 @@ class AppTheme {
   // ── Text ──────────────────────────────────────────────────────────────────
   static const Color textPrimary = Color(0xFF0F2750); // near-black
   static const Color textMuted = Color(0xFF64748B); // secondary text
-  static const Color textDim = Color(0xFF94A3B8); // placeholder / dim
+  static const Color textDim = Color(0xFF64748B); // placeholder / dim
 
   // ── Borders & Status ─────────────────────────────────────────────────────
   static const Color border = Color(0xFFE2E8F0);

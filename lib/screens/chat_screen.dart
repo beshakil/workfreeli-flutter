@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -315,12 +316,14 @@ class _RoomTile extends ConsumerWidget {
     [Color(0xFFEC4899), Color(0xFFF43F5E)],
     [Color(0xFF3B82F6), Color(0xFF06B6D4)],
     [Color(0xFF10B981), Color(0xFF059669)],
-    [Color(0xFFF59E0B), Color(0xFFEF4444)],
+    [Color(0xFFF59E0B), Color(0xFFD97706)],
+    [Color(0xFFEF4444), Color(0xFFDC2626)],
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = _gradients[room.id.hashCode.abs() % _gradients.length];
+    final index = room.id.hashCode % _gradients.length;
+    final colors = _gradients[index];
     // Watch per-conversation unread count — rebuilds only this tile.
     final unread = ref.watch(
       unreadCountsProvider.select((m) => m[room.id] ?? 0),
@@ -485,29 +488,17 @@ class _RoomAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isGroup = room.isGroup;
+    final img = room.convImg;
+    final hasValidUrl = img != null &&
+        img.isNotEmpty &&
+        (img.startsWith('http://') || img.startsWith('https://'));
+
     return Stack(
       children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-                colors: colors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight),
-            borderRadius: BorderRadius.circular(room.isGroup ? 14 : 25),
-          ),
-          child: Center(
-            child: Text(
-              room.initials,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 17,
-              ),
-            ),
-          ),
-        ),
+        hasValidUrl
+            ? _buildImageAvatar(isGroup, img)
+            : _buildInitialsAvatar(isGroup),
         if (room.isClosedFor)
           Positioned(
             right: 0,
@@ -525,6 +516,46 @@ class _RoomAvatar extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildImageAvatar(bool isGroup, String imageUrl) {
+    return ClipRRect(
+      borderRadius:
+          isGroup ? BorderRadius.circular(14) : BorderRadius.circular(25),
+      child: CachedNetworkImage(
+        imageUrl: imageUrl,
+        width: 50,
+        height: 50,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => _buildInitialsAvatar(isGroup),
+        errorWidget: (context, url, error) => _buildInitialsAvatar(isGroup),
+      ),
+    );
+  }
+
+  Widget _buildInitialsAvatar(bool isGroup) {
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+            colors: colors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+        shape: isGroup ? BoxShape.rectangle : BoxShape.circle,
+        borderRadius: isGroup ? BorderRadius.circular(14) : null,
+      ),
+      child: Center(
+        child: Text(
+          room.initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 17,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -44,8 +44,7 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text(
-                  'Camera and microphone permissions are required.')),
+              content: Text('Camera and microphone permissions are required.')),
         );
       }
       return;
@@ -195,8 +194,7 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
     final List<String> order = [];
 
     for (final e in entries) {
-      final d =
-          DateTime(e.createdAt.year, e.createdAt.month, e.createdAt.day);
+      final d = DateTime(e.createdAt.year, e.createdAt.month, e.createdAt.day);
       final String key;
       if (d == today) {
         key = 'Today';
@@ -212,16 +210,13 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
       bucket[key]!.add(e);
     }
 
-    return order
-        .map((k) => _Section(label: k, entries: bucket[k]!))
-        .toList();
+    return order.map((k) => _Section(label: k, entries: bucket[k]!)).toList();
   }
 
   int _flatCount(List<_Section> sections) =>
       sections.fold(0, (sum, s) => sum + 1 + s.entries.length);
 
-  Widget _buildFlatItem(
-      List<_Section> sections, int index, String selfId) {
+  Widget _buildFlatItem(List<_Section> sections, int index, String selfId) {
     int cursor = 0;
     for (final section in sections) {
       if (cursor == index) return _buildDateHeader(section.label);
@@ -253,8 +248,7 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
           onChanged: (v) => setState(() => _searchQuery = v),
           decoration: InputDecoration(
             hintText: 'Search calls…',
-            hintStyle:
-                AppTheme.bodyMedium.copyWith(color: AppTheme.textDim),
+            hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textDim),
             prefixIcon: const Icon(Icons.search_rounded,
                 color: AppTheme.textDim, size: 18),
             suffixIcon: _searchQuery.isNotEmpty
@@ -296,8 +290,7 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
     return InkWell(
       onTap: () => _openConversation(entry),
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
           border: Border(
@@ -350,9 +343,8 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
                       Text(
                         _directionLabel(direction),
                         style: AppTheme.bodySmall.copyWith(
-                          color: isMissed
-                              ? AppTheme.danger
-                              : AppTheme.textMuted,
+                          color:
+                              isMissed ? AppTheme.danger : AppTheme.textMuted,
                           fontSize: 12,
                         ),
                       ),
@@ -405,32 +397,35 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
         img.isNotEmpty &&
         (img.startsWith('http://') || img.startsWith('https://'));
 
-    final radius = entry.isGroup ? 14.0 : 25.0;
-
     if (hasValidUrl) {
+      final isGroup = entry.isGroup;
       return ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius:
+            isGroup ? BorderRadius.circular(14) : BorderRadius.circular(25),
         child: CachedNetworkImage(
           imageUrl: img,
           width: 50,
           height: 50,
           fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => _initialsAvatar(entry, radius),
+          errorWidget: (_, __, ___) => _initialsAvatar(entry),
         ),
       );
     }
-    return _initialsAvatar(entry, radius);
+    return _initialsAvatar(entry);
   }
 
-  Widget _initialsAvatar(CallHistoryEntry entry, double radius) {
+  Widget _initialsAvatar(CallHistoryEntry entry) {
+    final isGroup = entry.isGroup;
     const palettes = [
       [Color(0xFF6366F1), Color(0xFF8B5CF6)],
       [Color(0xFFEC4899), Color(0xFFF43F5E)],
       [Color(0xFF3B82F6), Color(0xFF06B6D4)],
       [Color(0xFF10B981), Color(0xFF059669)],
-      [Color(0xFFF59E0B), Color(0xFFEF4444)],
+      [Color(0xFFF59E0B), Color(0xFFD97706)],
+      [Color(0xFFEF4444), Color(0xFFDC2626)],
     ];
-    final colors = palettes[entry.convTitle.hashCode.abs() % palettes.length];
+    final index = entry.convTitle.hashCode % palettes.length;
+    final colors = palettes[index];
     return Container(
       width: 50,
       height: 50,
@@ -440,7 +435,8 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(radius),
+        shape: isGroup ? BoxShape.rectangle : BoxShape.circle,
+        borderRadius: isGroup ? BorderRadius.circular(14) : null,
       ),
       child: Center(
         child: Text(
@@ -508,8 +504,7 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
             _searchQuery.isNotEmpty
                 ? 'No results for "$_searchQuery"'
                 : 'No call history yet',
-            style:
-                AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+            style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
           ),
           if (_searchQuery.isEmpty) ...[
             const SizedBox(height: 6),
