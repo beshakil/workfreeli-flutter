@@ -457,11 +457,11 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
             spacing: 12,
             runSpacing: 6,
             children: [
-              if (task.createdBy.isNotEmpty)
+              /* if (task.createdBy.isNotEmpty)
                 _metaChip(
                   icon: Icons.person_outline_rounded,
                   label: task.createdBy,
-                ),
+                ), */
               if (task.formattedCreatedAt.isNotEmpty)
                 _metaChip(
                   icon: Icons.schedule_rounded,
