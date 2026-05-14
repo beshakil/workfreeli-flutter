@@ -8,11 +8,11 @@ class HomeScreenHeader extends StatefulWidget {
   /// Height of the header bar.
   static const double headerHeight = 60.0;
 
-  /// Called when the filter icon is tapped.
-  final VoidCallback? onFilterTap;
-
   /// Called when the menu icon is tapped.
   final VoidCallback? onMenuTap;
+
+  /// Called when the notification icon is tapped.
+  final VoidCallback? onNotificationTap;
 
   /// Currently selected filter
   final String selectedFilter;
@@ -22,8 +22,8 @@ class HomeScreenHeader extends StatefulWidget {
 
   const HomeScreenHeader({
     super.key,
-    this.onFilterTap,
     this.onMenuTap,
+    this.onNotificationTap,
     this.selectedFilter = 'All',
     this.showFilterDropdown = false,
   });
@@ -35,30 +35,32 @@ class HomeScreenHeader extends StatefulWidget {
 class _HomeScreenHeaderState extends State<HomeScreenHeader> {
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: HomeScreenHeader.headerHeight,
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0F2750),
-        ),
-        padding: const EdgeInsets.only(left: 12, top: 8, bottom: 8),
-        child: Row(
-          children: [
-            // ── Logo section ──────────────────────────────────────────
-            _buildLogo(),
-            const Spacer(),
-            // ── Action icons ──────────────────────────────────────────
-            _buildIconButton(
-              icon: Icons.filter_alt_rounded,
-              onTap: widget.onFilterTap,
-            ),
-            const SizedBox(width: 4),
-            _buildIconButton(
-              icon: Icons.menu_rounded,
-              onTap: widget.onMenuTap,
-            ),
-            const SizedBox(width: 8),
-          ],
+    return SafeArea(
+      bottom: false,
+      child: SizedBox(
+        height: HomeScreenHeader.headerHeight,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F2750),
+          ),
+          padding: const EdgeInsets.only(left: 12, top: 8, bottom: 8, right: 8),
+          child: Row(
+            children: [
+              // ── Logo section ──────────────────────────────────────────
+              _buildLogo(),
+              const Spacer(),
+              // ── Action icons (far right) ──────────────────────────────
+              _buildIconButton(
+                icon: Icons.notifications_rounded,
+                onTap: widget.onNotificationTap,
+              ),
+              const SizedBox(width: 8),
+              _buildIconButton(
+                icon: Icons.menu_rounded,
+                onTap: widget.onMenuTap,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -67,8 +69,8 @@ class _HomeScreenHeaderState extends State<HomeScreenHeader> {
   /// Builds the brand logo using the workfreeli-logo.png image.
   Widget _buildLogo() {
     return Image.asset(
-      'assets/images/workfreeli-logo.png',
-      height: 28,
+      'assets/images/workfreeli-dark-logo.png',
+      height: 36,
       fit: BoxFit.contain,
     );
   }
@@ -84,7 +86,7 @@ class _HomeScreenHeaderState extends State<HomeScreenHeader> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(6),
           child: Icon(
             icon,
             color: Colors.white,

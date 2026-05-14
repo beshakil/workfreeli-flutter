@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/conversations/conversations_providers.dart';
 import '../../features/conversations/conversations_service.dart';
 import '../../theme/app_theme.dart';
+import 'mute_notifications_modal.dart';
 
 /// Bottom sheet modal for room/chat long-press actions.
 ///
@@ -85,20 +86,37 @@ class ChatListActionModal extends ConsumerWidget {
     int index,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
 
     try {
       switch (index) {
         case 0:
+          // Pin/Unpin
+          Navigator.of(context).pop();
           await ConversationsService.togglePin(room.id, selfId);
+          ref.invalidate(roomsProvider);
         case 1:
-          await ConversationsService.toggleMute(room.id, selfId);
+          // Mute/Unmute - Open the mute notifications modal
+          Navigator.of(context).pop();
+          showDialog(
+            context: context,
+            barrierColor: Colors.black.withValues(alpha: 0.5),
+            builder: (_) => MuteNotificationsModal(
+              room: room,
+              selfId: selfId,
+            ),
+          );
+        // Refresh is handled inside MuteNotificationsModal
         case 2:
+          // Lock/Unlock
+          Navigator.of(context).pop();
           await ConversationsService.toggleClose(room.id);
+          ref.invalidate(roomsProvider);
         case 3:
+          // Archive
+          Navigator.of(context).pop();
           await ConversationsService.archiveConv(room.id);
+          ref.invalidate(roomsProvider);
       }
-      ref.invalidate(roomsProvider);
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(

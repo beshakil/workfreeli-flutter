@@ -15,6 +15,8 @@ class CompanySelectScreen extends ConsumerStatefulWidget {
 
 class _CompanySelectScreenState extends ConsumerState<CompanySelectScreen>
     with SingleTickerProviderStateMixin {
+  bool _isDarkMode = false;
+
   late AnimationController _animController;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
@@ -55,124 +57,197 @@ class _CompanySelectScreenState extends ConsumerState<CompanySelectScreen>
         authState.step == AuthStep.companyPending ? authState.error : null;
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0F1117), Color(0xFF16132A), Color(0xFF0F1117)],
-          ),
-        ),
-        child: Center(
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgCard,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.border),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 32,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Brand
-                      Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.accentGradient,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Center(
-                              child: Text('F',
-                                  style: AppTheme.headingSmall.copyWith(
-                                      color: Colors.white, fontSize: 20)),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          ShaderMask(
-                            shaderCallback: (bounds) =>
-                                const LinearGradient(colors: [
-                              AppTheme.textPrimary,
-                              AppTheme.primaryLight,
-                            ]).createShader(bounds),
-                            child: Text('Workfreeli',
-                                style: AppTheme.headingMedium.copyWith(
-                                    color: Colors.white, fontSize: 24)),
-                          ),
+      backgroundColor: _isDarkMode ? AppTheme.bg_dm : AppTheme.bg,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Background gradient
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: _isDarkMode
+                      ? const [
+                          Color(0xFF0D1117),
+                          Color(0xFF161B27),
+                          Color(0xFF0D1117)
+                        ]
+                      : const [
+                          Color(0xFFF1F5F9),
+                          Color(0xFFE2E8F0),
+                          Color(0xFFF1F5F9)
                         ],
-                      ),
-                      const SizedBox(height: 28),
-
-                      Text('Select workspace', style: AppTheme.headingMedium),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Your account belongs to multiple workspaces. Choose one to continue.',
-                        style: AppTheme.bodySmall.copyWith(height: 1.5),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Error banner
-                      if (error != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.danger.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: AppTheme.danger.withValues(alpha: 0.2)),
-                          ),
-                          child: Text(error,
-                              style: AppTheme.bodySmall
-                                  .copyWith(color: AppTheme.danger)),
+                ),
+              ),
+            ),
+            // Theme toggle in top-right corner
+            Positioned(
+              top: 8,
+              right: 8,
+              child: _buildThemeToggle(),
+            ),
+            // Main content
+            Center(
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.only(
+                          left: 24,
+                          right: 24,
+                          top: 16,
+                          bottom: constraints.maxHeight * 0.08,
                         ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32, vertical: 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Brand Logo
+                                Center(
+                                  child: Image.asset(
+                                    _isDarkMode
+                                        ? 'assets/images/workfreeli-dark-logo.png'
+                                        : 'assets/images/workfreeli-light-logo.png',
+                                    height: 50,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                                const SizedBox(height: 40),
 
-                      // Company list
-                      ...companies.map((c) => _CompanyTile(
-                            company: c,
-                            isLoading: isLoading,
-                            onTap: () => _select(c.companyId),
-                          )),
+                                // Title
+                                Center(
+                                  child: Text(
+                                    'Select workspace',
+                                    style: (_isDarkMode
+                                            ? AppTheme.headingLarge_dm
+                                            : AppTheme.headingLarge)
+                                        .copyWith(fontSize: 28),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Center(
+                                  child: Text(
+                                    'Your account belongs to multiple workspaces. Choose one to continue.',
+                                    style: _isDarkMode
+                                        ? AppTheme.bodyMedium_dm
+                                            .copyWith(height: 1.6)
+                                        : AppTheme.bodyMedium
+                                            .copyWith(height: 1.6),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
 
-                      const SizedBox(height: 8),
-                      Center(
-                        child: GestureDetector(
-                          onTap: () => ref
-                              .read(authNotifierProvider.notifier)
-                              .logout(),
-                          child: Text(
-                            'Sign out',
-                            style: AppTheme.caption.copyWith(
-                              color: AppTheme.textDim,
-                              fontWeight: FontWeight.w500,
+                                // Error banner
+                                if (error != null)
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    margin: const EdgeInsets.only(bottom: 20),
+                                    decoration: BoxDecoration(
+                                      color: (_isDarkMode
+                                              ? AppTheme.danger_dm
+                                              : AppTheme.danger)
+                                          .withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: (_isDarkMode
+                                                  ? AppTheme.danger_dm
+                                                  : AppTheme.danger)
+                                              .withValues(alpha: 0.2)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.error_outline_rounded,
+                                          color: _isDarkMode
+                                              ? AppTheme.danger_dm
+                                              : AppTheme.danger,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            error,
+                                            style: (_isDarkMode
+                                                    ? AppTheme.bodyMedium_dm
+                                                    : AppTheme.bodyMedium)
+                                                .copyWith(
+                                              color: _isDarkMode
+                                                  ? AppTheme.danger_dm
+                                                  : AppTheme.danger,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                // Company list
+                                ...companies.map((c) => _CompanyTile(
+                                      company: c,
+                                      isLoading: isLoading,
+                                      isDarkMode: _isDarkMode,
+                                      onTap: () => _select(c.companyId),
+                                    )),
+
+                                const SizedBox(height: 8),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isDarkMode = !_isDarkMode;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: _isDarkMode ? AppTheme.bgElevated_dm : AppTheme.accentSoft,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: _isDarkMode ? AppTheme.border_dm : AppTheme.border,
+            width: 2,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: _isDarkMode ? 0.35 : 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          _isDarkMode ? Icons.nightlight_round : Icons.wb_sunny_rounded,
+          size: 22,
+          color: _isDarkMode ? AppTheme.accentDark_dm : AppTheme.warning,
         ),
       ),
     );
@@ -183,11 +258,13 @@ class _CompanyTile extends StatelessWidget {
   const _CompanyTile({
     required this.company,
     required this.isLoading,
+    required this.isDarkMode,
     required this.onTap,
   });
 
   final Company company;
   final bool isLoading;
+  final bool isDarkMode;
   final VoidCallback onTap;
 
   @override
@@ -203,28 +280,43 @@ class _CompanyTile extends StatelessWidget {
     return GestureDetector(
       onTap: isLoading ? null : onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppTheme.bgElevated,
+          color: isDarkMode ? AppTheme.bgElevated_dm : AppTheme.bgElevated,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border),
+          border: Border.all(
+            color: isDarkMode ? AppTheme.border_dm : AppTheme.border,
+            width: 1.5,
+          ),
         ),
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient,
+                gradient: isDarkMode
+                    ? AppTheme.primaryGradient_dm
+                    : AppTheme.primaryGradient,
                 borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isDarkMode
+                            ? AppTheme.primaryDark_dm
+                            : AppTheme.primary)
+                        .withValues(alpha: 0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Center(
                 child: Text(
                   initials,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -234,11 +326,15 @@ class _CompanyTile extends StatelessWidget {
             Expanded(
               child: Text(
                 company.companyName,
-                style: AppTheme.bodyLarge.copyWith(fontWeight: FontWeight.w500),
+                style: (isDarkMode ? AppTheme.bodyLarge_dm : AppTheme.bodyLarge)
+                    .copyWith(fontWeight: FontWeight.w600),
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppTheme.textDim, size: 20),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: isDarkMode ? AppTheme.textDim_dm : AppTheme.textDim,
+              size: 20,
+            ),
           ],
         ),
       ),

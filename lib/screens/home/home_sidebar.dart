@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../features/auth/auth_providers.dart';
+import '../../features/user/user_providers.dart';
 import 'dart:ui';
 import 'switch_account_modal.dart';
 
@@ -125,6 +127,8 @@ class _HomeSidebarState extends ConsumerState<HomeSidebar> {
   }
 
   Widget _buildUserBioAndSwitchAccount() {
+    final meAsync = ref.watch(meProvider);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(16),
@@ -135,42 +139,52 @@ class _HomeSidebarState extends ConsumerState<HomeSidebar> {
       child: Column(
         children: [
           // User Avatar
-          Container(
-            width: 64,
-            height: 64,
-            decoration: const BoxDecoration(
-              color: Color(0xFF3B82F6),
-              shape: BoxShape.circle,
-            ),
-            child: const Center(
-              child: Text(
-                'M',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+          meAsync.when(
+            data: (user) => _buildUserAvatar(user),
+            loading: () => _buildLoadingAvatar(),
+            error: (_, __) =>
+                _buildFallbackAvatar('?', const Color(0xFF3B82F6)),
           ),
           const SizedBox(height: 12),
           // User Name
-          const Text(
-            'MD Ahmed Shakil',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
+          meAsync.when(
+            data: (user) => Text(
+              user.fullName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            loading: () => _buildLoadingText(width: 140),
+            error: (_, __) => const Text(
+              'User',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(height: 6),
-          // User Role
-          const Text(
-            'ITL Dev',
-            style: TextStyle(
-              color: Color(0xFF94A3B8),
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
+          // Company Name
+          meAsync.when(
+            data: (user) => Text(
+              user.companyName.isNotEmpty ? user.companyName : 'No Company',
+              style: const TextStyle(
+                color: Color(0xFF94A3B8),
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            loading: () => _buildLoadingText(width: 100),
+            error: (_, __) => const Text(
+              'Company',
+              style: TextStyle(
+                color: Color(0xFF94A3B8),
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -183,6 +197,87 @@ class _HomeSidebarState extends ConsumerState<HomeSidebar> {
           // Switch Account
           _buildSwitchAccount(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUserAvatar(dynamic user) {
+    final img = user.img;
+    final hasValidUrl = img != null &&
+        img.isNotEmpty &&
+        (img.startsWith('http://') || img.startsWith('https://'));
+
+    if (hasValidUrl) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: CachedNetworkImage(
+          imageUrl: img,
+          width: 64,
+          height: 64,
+          fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => _buildFallbackAvatar(
+            user.initials.isNotEmpty ? user.initials : '?',
+            const Color(0xFF3B82F6),
+          ),
+        ),
+      );
+    }
+
+    return _buildFallbackAvatar(
+      user.initials.isNotEmpty ? user.initials : '?',
+      const Color(0xFF3B82F6),
+    );
+  }
+
+  Widget _buildFallbackAvatar(String initials, Color color) {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingAvatar() {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: const BoxDecoration(
+        color: Color(0xFF3B82F6),
+        shape: BoxShape.circle,
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingText({required double width}) {
+    return Container(
+      width: width,
+      height: 18,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(4),
       ),
     );
   }
@@ -214,7 +309,7 @@ class _HomeSidebarState extends ConsumerState<HomeSidebar> {
 
   Widget _buildLogo() {
     return Image.asset(
-      'assets/images/workfreeli-logo.png',
+      'assets/images/workfreeli-dark-logo.png',
       height: 24,
       fit: BoxFit.contain,
     );
