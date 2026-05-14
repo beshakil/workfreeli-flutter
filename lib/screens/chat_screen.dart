@@ -152,45 +152,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(
-        children: [
-          _buildSearchBar(),
-          _buildFilterBar(),
-          Expanded(
-            child: roomsAsync.when(
-              loading: () => _buildSkeletons(),
-              error: (err, _) => _buildError(
-                err.toString().replaceFirst('Exception: ', ''),
-                onRetry: () => ref.invalidate(roomsProvider),
-              ),
-              data: (rooms) {
-                final filtered = _applyFilters(rooms, unreadCounts);
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            _buildSearchBar(),
+            _buildFilterBar(),
+            Expanded(
+              child: roomsAsync.when(
+                loading: () => _buildSkeletons(),
+                error: (err, _) => _buildError(
+                  err.toString().replaceFirst('Exception: ', ''),
+                  onRetry: () => ref.invalidate(roomsProvider),
+                ),
+                data: (rooms) {
+                  final filtered = _applyFilters(rooms, unreadCounts);
 
-                if (filtered.isEmpty) {
-                  return _searchQuery.isNotEmpty
-                      ? _buildNoResults()
-                      : _buildEmpty();
-                }
+                  if (filtered.isEmpty) {
+                    return _searchQuery.isNotEmpty
+                        ? _buildNoResults()
+                        : _buildEmpty();
+                  }
 
-                final selfId = ref.read(meProvider).valueOrNull?.id ?? '';
-                return RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(roomsProvider),
-                  color: AppTheme.primary,
-                  backgroundColor: AppTheme.bgCard,
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) => _RoomTile(
-                      room: filtered[index],
-                      selfId: selfId,
+                  final selfId = ref.read(meProvider).valueOrNull?.id ?? '';
+                  return RefreshIndicator(
+                    onRefresh: () async => ref.invalidate(roomsProvider),
+                    color: AppTheme.primary,
+                    backgroundColor: AppTheme.bgCard,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) => _RoomTile(
+                        room: filtered[index],
+                        selfId: selfId,
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

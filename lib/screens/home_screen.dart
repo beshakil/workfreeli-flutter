@@ -485,21 +485,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       children: [
         Scaffold(
           backgroundColor: AppTheme.bg,
-          body: Column(
-            children: [
-              HomeScreenHeader(
-                onMenuTap: _toggleSidebar,
-                onNotificationTap: _onNotificationTap,
-                selectedFilter: _selectedFilter,
-                showFilterDropdown: _isFilterDropdownOpen,
-              ),
-              Expanded(
-                child: FadeTransition(
-                  opacity: _fadeController,
-                  child: _screens[_currentIndex],
+          body: SafeArea(
+            child: Column(
+              children: [
+                HomeScreenHeader(
+                  onMenuTap: _toggleSidebar,
+                  onNotificationTap: _onNotificationTap,
+                  selectedFilter: _selectedFilter,
+                  showFilterDropdown: _isFilterDropdownOpen,
                 ),
-              ),
-            ],
+                Expanded(
+                  child: FadeTransition(
+                    opacity: _fadeController,
+                    child: _screens[_currentIndex],
+                  ),
+                ),
+              ],
+            ),
           ),
           floatingActionButton: !_isSidebarOpen && _currentIndex == 0
               ? FloatingActionButton(
@@ -522,7 +524,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -582,66 +584,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     int badge = 0,
   }) {
     final isActive = _currentIndex == index;
-    return GestureDetector(
-      onTap: () => _onTabTapped(index),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? AppTheme.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  icon,
-                  color: isActive ? AppTheme.primary : AppTheme.textDim,
-                  size: 24,
-                ),
-                if (badge > 0)
-                  Positioned(
-                    right: -8,
-                    top: -4,
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 18),
-                      height: 18,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.danger,
-                        borderRadius: BorderRadius.circular(9),
-                        border: Border.all(color: AppTheme.bgCard, width: 1.5),
-                      ),
-                      child: Center(
-                        child: Text(
-                          badge > 99 ? '99+' : '$badge',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _onTabTapped(index),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? AppTheme.primary.withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    icon,
+                    color: isActive ? AppTheme.primary : AppTheme.textDim,
+                    size: 22,
+                  ),
+                  if (badge > 0)
+                    Positioned(
+                      right: -6,
+                      top: -2,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 16),
+                        height: 16,
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.danger,
+                          borderRadius: BorderRadius.circular(8),
+                          border:
+                              Border.all(color: AppTheme.bgCard, width: 1.5),
+                        ),
+                        child: Center(
+                          child: Text(
+                            badge > 99 ? '99+' : '$badge',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? AppTheme.primary : AppTheme.textDim,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isActive ? AppTheme.primary : AppTheme.textDim,
+                  fontSize: 10,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ],
+          ),
         ),
       ),
     );

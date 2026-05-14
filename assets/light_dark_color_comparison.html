@@ -1,0 +1,77 @@
+
+<style>
+  body { margin: 0; font-family: var(--font-sans); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 0; }
+  .panel { border-radius: var(--border-radius-lg); overflow: hidden; border: 1px solid var(--color-border-tertiary); }
+  .panel-header { padding: 10px 14px; font-size: 13px; font-weight: 500; letter-spacing: 0.5px; }
+  .light-header { background: #F1F5F9; color: #0F2750; border-bottom: 1px solid #E2E8F0; }
+  .dark-header  { background: #0D1117; color: #E2E8F0; border-bottom: 1px solid #2D3748; }
+  .swatch-row { display: flex; align-items: center; gap: 10px; padding: 7px 14px; font-size: 12px; }
+  .swatch { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.08); }
+  .label { flex: 1; }
+  .hex { font-family: var(--font-mono); font-size: 11px; opacity: 0.6; }
+  .section-label { font-size: 11px; font-weight: 500; letter-spacing: 0.8px; padding: 8px 14px 2px; opacity: 0.45; text-transform: uppercase; }
+  .light-bg { background: #fff; color: #0F2750; }
+  .dark-bg  { background: #161B27; color: #E2E8F0; }
+  .grad-bar { height: 20px; border-radius: 4px; margin: 0 14px 10px; }
+</style>
+
+<div class="grid">
+  <!-- LIGHT -->
+  <div class="panel">
+    <div class="panel-header light-header">☀️ Light Mode</div>
+    <div class="light-bg">
+      <div class="section-label" style="color:#0F2750">Backgrounds</div>
+      <div class="swatch-row"><div class="swatch" style="background:#F1F5F9"></div><div class="label">bg (page)</div><div class="hex">#F1F5F9</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#FFFFFF;border-color:#E2E8F0"></div><div class="label">bgCard</div><div class="hex">#FFFFFF</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#F8FAFC"></div><div class="label">bgElevated</div><div class="hex">#F8FAFC</div></div>
+
+      <div class="section-label" style="color:#0F2750">Text</div>
+      <div class="swatch-row"><div class="swatch" style="background:#0F2750"></div><div class="label">textPrimary</div><div class="hex">#0F2750</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#64748B"></div><div class="label">textMuted</div><div class="hex">#64748B</div></div>
+
+      <div class="section-label" style="color:#0F2750">Brand</div>
+      <div class="swatch-row"><div class="swatch" style="background:#2440BD"></div><div class="label">primary</div><div class="hex">#2440BD</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#6366F1"></div><div class="label">accent</div><div class="hex">#6366F1</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#EEF2FF"></div><div class="label">accentSoft</div><div class="hex">#EEF2FF</div></div>
+
+      <div class="section-label" style="color:#0F2750">Status</div>
+      <div class="swatch-row"><div class="swatch" style="background:#EF4444"></div><div class="label">danger</div><div class="hex">#EF4444</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#F59E0B"></div><div class="label">warning</div><div class="hex">#F59E0B</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#10B981"></div><div class="label">success</div><div class="hex">#10B981</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#E2E8F0"></div><div class="label">border</div><div class="hex">#E2E8F0</div></div>
+
+      <div class="section-label" style="color:#0F2750">Gradient</div>
+      <div class="grad-bar" style="background:linear-gradient(135deg,#2440BD,#6366F1)"></div>
+    </div>
+  </div>
+
+  <!-- DARK -->
+  <div class="panel">
+    <div class="panel-header dark-header">🌙 Dark Mode</div>
+    <div class="dark-bg">
+      <div class="section-label" style="color:#94A3B8">Backgrounds</div>
+      <div class="swatch-row"><div class="swatch" style="background:#0D1117"></div><div class="label" style="color:#E2E8F0">bg_dm (page)</div><div class="hex" style="color:#94A3B8">#0D1117</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#161B27"></div><div class="label" style="color:#E2E8F0">bgCard_dm</div><div class="hex" style="color:#94A3B8">#161B27</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#1E2535"></div><div class="label" style="color:#E2E8F0">bgElevated_dm</div><div class="hex" style="color:#94A3B8">#1E2535</div></div>
+
+      <div class="section-label" style="color:#94A3B8">Text</div>
+      <div class="swatch-row"><div class="swatch" style="background:#E2E8F0"></div><div class="label" style="color:#E2E8F0">textPrimary_dm</div><div class="hex" style="color:#94A3B8">#E2E8F0</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#94A3B8"></div><div class="label" style="color:#E2E8F0">textMuted_dm</div><div class="hex" style="color:#94A3B8">#94A3B8</div></div>
+
+      <div class="section-label" style="color:#94A3B8">Brand</div>
+      <div class="swatch-row"><div class="swatch" style="background:#4F6AE8"></div><div class="label" style="color:#E2E8F0">primary_dm</div><div class="hex" style="color:#94A3B8">#4F6AE8</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#818CF8"></div><div class="label" style="color:#E2E8F0">accent_dm</div><div class="hex" style="color:#94A3B8">#818CF8</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#1E1B4B"></div><div class="label" style="color:#E2E8F0">accentSoft_dm</div><div class="hex" style="color:#94A3B8">#1E1B4B</div></div>
+
+      <div class="section-label" style="color:#94A3B8">Status</div>
+      <div class="swatch-row"><div class="swatch" style="background:#F87171"></div><div class="label" style="color:#E2E8F0">danger_dm</div><div class="hex" style="color:#94A3B8">#F87171</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#FBBF24"></div><div class="label" style="color:#E2E8F0">warning_dm</div><div class="hex" style="color:#94A3B8">#FBBF24</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#34D399"></div><div class="label" style="color:#E2E8F0">success_dm</div><div class="hex" style="color:#94A3B8">#34D399</div></div>
+      <div class="swatch-row"><div class="swatch" style="background:#2D3748"></div><div class="label" style="color:#E2E8F0">border_dm</div><div class="hex" style="color:#94A3B8">#2D3748</div></div>
+
+      <div class="section-label" style="color:#94A3B8">Gradient</div>
+      <div class="grad-bar" style="background:linear-gradient(135deg,#4F6AE8,#818CF8)"></div>
+    </div>
+  </div>
+</div>

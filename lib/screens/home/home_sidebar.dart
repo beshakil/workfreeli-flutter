@@ -309,7 +309,7 @@ class _HomeSidebarState extends ConsumerState<HomeSidebar> {
 
   Widget _buildLogo() {
     return Image.asset(
-      'assets/images/workfreeli-logo.png',
+      'assets/images/workfreeli-dark-logo.png',
       height: 24,
       fit: BoxFit.contain,
     );

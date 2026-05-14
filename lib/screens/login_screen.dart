@@ -17,6 +17,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _otpLoginMode = false;
+  bool _isDarkMode = false;
 
   late AnimationController _animController;
   late Animation<Offset> _slideAnimation;
@@ -64,216 +65,289 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     final isLoading = authState.isLoading;
-    final error = authState.step == AuthStep.unauthenticated
-        ? authState.error
-        : null;
+    final error =
+        authState.step == AuthStep.unauthenticated ? authState.error : null;
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0F1117), Color(0xFF16132A), Color(0xFF0F1117)],
-          ),
-        ),
-        child: Center(
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgCard,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.border),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 32,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Brand
-                      Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.accentGradient,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Center(
-                              child: Text(
-                                'F',
-                                style: AppTheme.headingSmall.copyWith(
-                                    color: Colors.white, fontSize: 20),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          ShaderMask(
-                            shaderCallback: (bounds) =>
-                                const LinearGradient(colors: [
-                              AppTheme.textPrimary,
-                              AppTheme.primaryLight,
-                            ]).createShader(bounds),
-                            child: Text(
-                              'Workfreeli',
-                              style: AppTheme.headingMedium.copyWith(
-                                  color: Colors.white, fontSize: 24),
-                            ),
-                          ),
+      backgroundColor: _isDarkMode ? AppTheme.bg_dm : AppTheme.bg,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Background gradient
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: _isDarkMode
+                      ? const [
+                          Color(0xFF0D1117),
+                          Color(0xFF161B27),
+                          Color(0xFF0D1117)
+                        ]
+                      : const [
+                          Color(0xFFF1F5F9),
+                          Color(0xFFE2E8F0),
+                          Color(0xFFF1F5F9)
                         ],
-                      ),
-                      const SizedBox(height: 28),
-
-                      Text('Welcome back', style: AppTheme.headingMedium),
-                      const SizedBox(height: 6),
-                      Text(
-                        _otpLoginMode
-                            ? "Enter your email and we'll send you a one-time code."
-                            : 'Sign in to your workspace to continue collaborating.',
-                        style: AppTheme.bodySmall.copyWith(height: 1.5),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Error banner
-                      if (error != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.danger.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: AppTheme.danger.withValues(alpha: 0.2)),
-                          ),
-                          child: Text(error,
-                              style: AppTheme.bodySmall
-                                  .copyWith(color: AppTheme.danger)),
+                ),
+              ),
+            ),
+            // Theme toggle in top-right corner
+            Positioned(
+              top: 8,
+              right: 8,
+              child: _buildThemeToggle(),
+            ),
+            // Main content
+            Center(
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.only(
+                          left: 24,
+                          right: 24,
+                          top: 16,
+                          bottom: constraints.maxHeight * 0.08,
                         ),
-
-                      // Email field
-                      Text('Email address',
-                          style: AppTheme.bodySmall
-                              .copyWith(fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 6),
-                      _buildTextField(
-                        controller: _emailController,
-                        hint: 'you@example.com',
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Password field (hidden in OTP mode)
-                      if (!_otpLoginMode) ...[
-                        Text('Password',
-                            style: AppTheme.bodySmall
-                                .copyWith(fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 6),
-                        _buildTextField(
-                          controller: _passwordController,
-                          hint: 'Enter your password',
-                          obscure: _obscurePassword,
-                          suffix: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off_rounded
-                                  : Icons.visibility_rounded,
-                              color: AppTheme.textDim,
-                              size: 20,
-                            ),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ] else
-                        const SizedBox(height: 24),
-
-                      // Sign In button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.primaryGradient,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.primary.withValues(alpha: 0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton(
-                            onPressed: isLoading ? null : _handleSignIn,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                            ),
-                            child: isLoading
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation(
-                                          Colors.white),
-                                    ),
-                                  )
-                                : Text(
-                                    _otpLoginMode
-                                        ? 'Send OTP Code'
-                                        : 'Sign In',
-                                    style: AppTheme.bodyLarge.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32, vertical: 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Brand Logo
+                                Center(
+                                  child: Image.asset(
+                                    _isDarkMode
+                                        ? 'assets/images/workfreeli-dark-logo.png'
+                                        : 'assets/images/workfreeli-light-logo.png',
+                                    height: 50,
+                                    fit: BoxFit.contain,
                                   ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                                ),
+                                const SizedBox(height: 40),
 
-                      // Toggle OTP / password mode
-                      Center(
-                        child: GestureDetector(
-                          onTap: () =>
-                              setState(() => _otpLoginMode = !_otpLoginMode),
-                          child: Text.rich(
-                            TextSpan(
-                              text: _otpLoginMode
-                                  ? 'Sign in with password instead'
-                                  : 'Sign in with email OTP instead',
-                              style: AppTheme.caption.copyWith(
-                                color: AppTheme.primaryLight,
-                                fontWeight: FontWeight.w500,
-                              ),
+                                // Welcome Text
+                                Center(
+                                  child: Text(
+                                    'Welcome back',
+                                    style: (_isDarkMode
+                                            ? AppTheme.headingLarge_dm
+                                            : AppTheme.headingLarge)
+                                        .copyWith(fontSize: 32),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Center(
+                                  child: Text(
+                                    _otpLoginMode
+                                        ? "Enter your email and we'll send you a one-time code."
+                                        : 'Sign in to your workspace to continue collaborating.',
+                                    style: _isDarkMode
+                                        ? AppTheme.bodyMedium_dm
+                                            .copyWith(height: 1.6)
+                                        : AppTheme.bodyMedium
+                                            .copyWith(height: 1.6),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
+
+                                // Error banner
+                                if (error != null)
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    margin: const EdgeInsets.only(bottom: 20),
+                                    decoration: BoxDecoration(
+                                      color: (_isDarkMode
+                                              ? AppTheme.danger_dm
+                                              : AppTheme.danger)
+                                          .withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: (_isDarkMode
+                                                  ? AppTheme.danger_dm
+                                                  : AppTheme.danger)
+                                              .withValues(alpha: 0.2)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.error_outline_rounded,
+                                          color: _isDarkMode
+                                              ? AppTheme.danger_dm
+                                              : AppTheme.danger,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            error,
+                                            style: (_isDarkMode
+                                                    ? AppTheme.bodyMedium_dm
+                                                    : AppTheme.bodyMedium)
+                                                .copyWith(
+                                              color: _isDarkMode
+                                                  ? AppTheme.danger_dm
+                                                  : AppTheme.danger,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                // Email field
+                                Text(
+                                  'Email address',
+                                  style: (_isDarkMode
+                                          ? AppTheme.bodyMedium_dm
+                                          : AppTheme.bodyMedium)
+                                      .copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildTextField(
+                                  controller: _emailController,
+                                  hint: 'you@example.com',
+                                  keyboardType: TextInputType.emailAddress,
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Password field (hidden in OTP mode)
+                                if (!_otpLoginMode) ...[
+                                  Text(
+                                    'Password',
+                                    style: (_isDarkMode
+                                            ? AppTheme.bodyMedium_dm
+                                            : AppTheme.bodyMedium)
+                                        .copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildTextField(
+                                    controller: _passwordController,
+                                    hint: 'Enter your password',
+                                    obscure: _obscurePassword,
+                                    suffix: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_off_rounded
+                                            : Icons.visibility_rounded,
+                                        color: _isDarkMode
+                                            ? AppTheme.textMuted_dm
+                                            : AppTheme.textMuted,
+                                        size: 20,
+                                      ),
+                                      onPressed: () => setState(() =>
+                                          _obscurePassword = !_obscurePassword),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                ] else
+                                  const SizedBox(height: 24),
+
+                                // Sign In button
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: _isDarkMode
+                                          ? AppTheme.primaryGradient_dm
+                                          : AppTheme.primaryGradient,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: (_isDarkMode
+                                                  ? AppTheme.primaryDark_dm
+                                                  : AppTheme.primary)
+                                              .withValues(alpha: 0.25),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ElevatedButton(
+                                      onPressed:
+                                          isLoading ? null : _handleSignIn,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.transparent,
+                                        shadowColor: Colors.transparent,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12)),
+                                      ),
+                                      child: isLoading
+                                          ? const SizedBox(
+                                              width: 24,
+                                              height: 24,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.5,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation(
+                                                        Colors.white),
+                                              ),
+                                            )
+                                          : Text(
+                                              _otpLoginMode
+                                                  ? 'Send OTP Code'
+                                                  : 'Sign In',
+                                              style: (_isDarkMode
+                                                      ? AppTheme.bodyLarge_dm
+                                                      : AppTheme.bodyLarge)
+                                                  .copyWith(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 16),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Toggle OTP / password mode
+                                Center(
+                                  child: GestureDetector(
+                                    onTap: () => setState(
+                                        () => _otpLoginMode = !_otpLoginMode),
+                                    child: Text.rich(
+                                      TextSpan(
+                                        text: _otpLoginMode
+                                            ? 'Sign in with password instead'
+                                            : 'Sign in with email OTP instead',
+                                        style: (_isDarkMode
+                                                ? AppTheme.bodyMedium_dm
+                                                : AppTheme.bodyMedium)
+                                            .copyWith(
+                                          color: _isDarkMode
+                                              ? AppTheme.accentDark_dm
+                                              : AppTheme.primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -290,28 +364,72 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
-      style: AppTheme.bodyLarge,
+      style: (_isDarkMode ? AppTheme.bodyLarge_dm : AppTheme.bodyLarge),
       onSubmitted: (_) => _handleSignIn(),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: AppTheme.bodyLarge.copyWith(color: AppTheme.textDim),
+        hintStyle: (_isDarkMode ? AppTheme.bodyMedium_dm : AppTheme.bodyMedium)
+            .copyWith(
+                color: _isDarkMode ? AppTheme.textDim_dm : AppTheme.textDim),
         filled: true,
-        fillColor: AppTheme.bgElevated,
+        fillColor: _isDarkMode ? AppTheme.bgElevated_dm : Colors.white,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppTheme.border),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+              color: _isDarkMode ? AppTheme.border_dm : AppTheme.border,
+              width: 1.5),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppTheme.border),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+              color: _isDarkMode ? AppTheme.border_dm : AppTheme.border,
+              width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+              color: _isDarkMode ? AppTheme.accentDark_dm : AppTheme.primary,
+              width: 2),
         ),
         suffixIcon: suffix,
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isDarkMode = !_isDarkMode;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: _isDarkMode ? AppTheme.bgElevated_dm : AppTheme.accentSoft,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: _isDarkMode ? AppTheme.border_dm : AppTheme.border,
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: _isDarkMode ? 0.35 : 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          _isDarkMode ? Icons.nightlight_round : Icons.wb_sunny_rounded,
+          size: 22,
+          color: _isDarkMode ? AppTheme.accentDark_dm : AppTheme.warning,
+        ),
       ),
     );
   }
