@@ -1,17 +1,20 @@
+import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/encryption/encryption_service.dart';
 import '../core/models/conversation_models.dart' show Room;
-import '../features/calls/call_signaling_service.dart';
 import '../features/calls/calls_providers.dart';
-import '../features/calls/jitsi_service.dart';
 import '../features/conversations/conversations_providers.dart';
 import '../features/user/user_providers.dart';
 import '../features/xmpp/xmpp_provider.dart';
+import '../services/call_notification_service.dart';
+import '../services/fcm_service.dart';
 import '../shared/home_screen_header.dart';
 import '../theme/app_theme.dart';
-import '../widgets/incoming_call_overlay.dart';
 import 'chat_screen.dart';
 import 'calls_screen.dart';
 import 'files_screen.dart';
@@ -19,6 +22,7 @@ import 'home/home_sidebar.dart';
 import 'home/home_chat_filter_dropdown.dart';
 import 'create_room_sheet.dart';
 import 'direct_message_sheet.dart';
+import 'incoming_call_screen.dart';
 import 'message_screen.dart';
 import 'profile_screen.dart';
 import 'tasks_screen.dart';
@@ -39,10 +43,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   String _selectedFilter = 'All';
   OverlayEntry? _filterDropdownOverlay;
 
-  // Tracks an active outgoing/accepted call for cleanup in onReadyToClose.
-  String? _activeCallConvId;
-  String? _activeCallUserId;
-  String? _activeCallUserName;
+  // FCM / notification subscriptions — cancelled in dispose().
+  StreamSubscription<RemoteMessage>? _fcmCallSub;
+  StreamSubscription<NotificationResponse>? _notifResponseSub;
 
   final List<Widget> _screens = const [
     ChatScreen(),
@@ -61,6 +64,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       duration: const Duration(milliseconds: 300),
     );
     _fadeController.forward();
+
+    // Route foreground FCM call events. Deduplication against XMPP is handled
+    // inside _onForegroundFcmCall (checks incomingCallProvider.hasActiveCall).
+    _fcmCallSub =
+        FcmService.foregroundCallStream.listen(_onForegroundFcmCall);
+
+    // Route local notification action responses (e.g. "Accept" tapped on a
+    // heads-up or lock-screen notification while the app is in the background).
+    _notifResponseSub =
+        CallNotificationService.responseStream.listen(_onNotificationResponse);
+
+    // Detect if the app was cold-started from a terminated-state call
+    // notification (either body tap or Accept action).
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _checkPendingCall());
   }
 
   @override
@@ -68,6 +86,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _hideFilterDropdown();
     WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
+    _fcmCallSub?.cancel();
+    _notifResponseSub?.cancel();
     super.dispose();
   }
 
@@ -78,6 +98,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(roomsProvider);
       ref.invalidate(unreadInitProvider);
+      // Re-check for a call that was delivered while the app was backgrounded
+      // and whose notification was tapped by the user.
+      _checkPendingCall();
     }
   }
 
@@ -145,83 +168,103 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     });
   }
 
-  // ── Incoming call handling ──────────────────────────────────────────────────
+  // ── FCM / notification integration ─────────────────────────────────────────
 
-  void _acceptIncomingCall() async {
-    final incoming = ref.read(incomingCallProvider);
-    if (!incoming.hasActiveCall) return;
-
-    final me = ref.read(meProvider).valueOrNull;
-    if (me == null) return;
-
-    ref.read(incomingCallProvider.notifier).dismiss();
-
-    final granted = await JitsiService.requestCallPermissions();
-    if (!granted) return;
-
-    try {
-      final jwt = await CallSignalingService.acceptCall(
-        userId: me.id,
-        conversationId: incoming.conversationId!,
-      );
-
-      if (jwt == null || jwt.isEmpty) return;
-
-      _activeCallConvId = incoming.conversationId;
-      _activeCallUserId = me.id;
-      _activeCallUserName = '${me.firstname} ${me.lastname}'.trim();
-
-      await JitsiService.join(
-        conversationId: incoming.conversationId!,
-        jwtToken: jwt,
-        isVideo: incoming.isVideo,
-        userName: _activeCallUserName!,
-        userEmail: me.email,
-        userAvatar: me.img,
-        onReadyToClose: _onCallEnded,
-      );
-    } catch (e) {
-      debugPrint('[HomeScreen] Accept call failed: $e');
-    }
-  }
-
-  void _declineIncomingCall() async {
-    final incoming = ref.read(incomingCallProvider);
-    if (!incoming.hasActiveCall) return;
-
-    final me = ref.read(meProvider).valueOrNull;
-    ref.read(incomingCallProvider.notifier).dismiss();
-
-    if (me == null) return;
-    try {
-      await CallSignalingService.hangupCall(
-        userId: me.id,
-        userFullName: '${me.firstname} ${me.lastname}'.trim(),
-        conversationId: incoming.conversationId!,
-        endCall: false,
-      );
-    } catch (_) {}
-  }
-
-  Future<void> _onCallEnded() async {
-    final convId = _activeCallConvId;
-    final userId = _activeCallUserId;
-    final userName = _activeCallUserName ?? '';
-
-    _activeCallConvId = null;
-    _activeCallUserId = null;
-    _activeCallUserName = null;
-
-    if (convId != null && userId != null) {
-      try {
-        await CallSignalingService.hangupCall(
-          userId: userId,
-          userFullName: userName,
-          conversationId: convId,
+  /// Called on first build and every time the app resumes from background.
+  /// Reads any call stored in SharedPreferences by the background FCM handler
+  /// and opens [IncomingCallScreen] if one is found.
+  Future<void> _checkPendingCall() async {
+    // 1. App was cold-started by tapping this plugin's notification.
+    final launchResponse = CallNotificationService.launchResponse;
+    if (launchResponse != null) {
+      CallNotificationService.clearLaunchResponse();
+      final pending = await CallNotificationService.consumePendingCall();
+      if (pending.data != null) {
+        _openIncomingCallScreen(
+          pending.data!,
+          autoAccept: launchResponse.actionId == 'accept_call',
         );
-      } catch (_) {}
+        return;
+      }
     }
-    if (mounted) ref.invalidate(callHistoryProvider);
+
+    // 2. App resumed from background with a pending call stored in prefs.
+    final pending = await CallNotificationService.consumePendingCall();
+    if (pending.data != null && pending.action != 'decline') {
+      _openIncomingCallScreen(
+        pending.data!,
+        autoAccept: pending.action == 'accept',
+      );
+    }
+  }
+
+  /// Handles notification action taps that arrive while the app is already
+  /// running (foreground or background→foreground transition).
+  Future<void> _onNotificationResponse(NotificationResponse response) async {
+    if (response.actionId == 'decline_call') return; // handled in background isolate
+    final pending = await CallNotificationService.consumePendingCall();
+    if (pending.data == null) return;
+    _openIncomingCallScreen(
+      pending.data!,
+      autoAccept: response.actionId == 'accept_call',
+    );
+  }
+
+  /// Handles foreground FCM call events (app is visible when the push arrives).
+  ///
+  /// Deduplicates against the XMPP overlay — if XMPP already showed the
+  /// incoming-call overlay, [incomingCallProvider.hasActiveCall] is true and
+  /// we skip the FCM event to avoid showing a duplicate UI.
+  void _onForegroundFcmCall(RemoteMessage message) {
+    final fcmType = message.data['fcm_type'] ?? '';
+    switch (fcmType) {
+      case 'jitsi_ring_send':
+        final incoming = IncomingCallState.fromXmppData(message.data);
+        final current = ref.read(incomingCallProvider);
+        // Deduplicate: skip only if this exact conversation is already ringing.
+        // A cleared provider (hasActiveCall == false) always lets the call through.
+        if (current.conversationId == incoming.conversationId &&
+            current.hasActiveCall) {
+          return;
+        }
+        ref.read(incomingCallProvider.notifier).show(incoming);
+      case 'jitsi_send_hangup':
+      case 'jitsi_send_accept':
+        ref.read(incomingCallProvider.notifier).dismiss();
+        CallNotificationService.dismissCallNotification();
+    }
+  }
+
+  void _openIncomingCallScreen(
+    Map<String, dynamic> data, {
+    required bool autoAccept,
+  }) {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => IncomingCallScreen(
+          callData: data,
+          autoAccept: autoAccept,
+        ),
+      ),
+    );
+  }
+
+  /// Converts [IncomingCallState] (from XMPP or foreground FCM) to the
+  /// normalised data map that [IncomingCallScreen] expects, then pushes it.
+  void _openIncomingCallScreenFromState(IncomingCallState state) {
+    _openIncomingCallScreen(
+      {
+        'user_fullname': state.callerName ?? 'Unknown',
+        'user_img': state.callerImg ?? '',
+        'conversation_id': state.conversationId ?? '',
+        'set_calltype': state.isVideo ? 'video' : 'audio',
+        'convname': state.convTitle ?? '',
+        'caller_id': state.callerId ?? '',
+      },
+      autoAccept: false,
+    );
   }
 
   String _buildPreview(Map<String, dynamic> data) {
@@ -370,6 +413,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     // new XMPP events.
     ref.watch(unreadInitProvider);
 
+    // Register the FCM token once per login session so the backend can send
+    // call push notifications when the device is not reachable via XMPP.
+    ref.listen(meProvider, (prev, next) {
+      if (next.value == null) return;
+      if (prev?.value?.id == next.value?.id) return;
+      FcmService.requestPermissions();
+      FcmService.registerToken(next.value!.id);
+    });
+
+    // Open the full-screen ringing UI whenever a new call arrives via XMPP
+    // (jitsi_busy_status) or foreground FCM (jitsi_ring_send).
+    ref.listen(incomingCallProvider, (prev, next) {
+      if (next.hasActiveCall && !(prev?.hasActiveCall ?? false)) {
+        _openIncomingCallScreenFromState(next);
+      }
+    });
+
     // Global XMPP event handler — lives in HomeScreen so it fires regardless
     // of which tab is currently active.
     ref.listen(xmppEventStreamProvider, (_, next) {
@@ -443,8 +503,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ref.invalidate(roomsProvider);
           ref.invalidate(unreadInitProvider);
 
-        case 'jitsi_busy_status':
-          // Incoming call — show overlay only for the callee.
+        case 'jitsi_ring_send':
+          // Incoming call — show full-screen ringing UI for the callee.
+          // The backend sends this to receiver_id; data['user_id'] is the caller.
           final selfId = ref.read(meProvider).value?.id ?? '';
           final callerId =
               (data['caller_id'] ?? data['user_id'])?.toString() ?? '';
@@ -554,18 +615,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
         ),
         if (_isSidebarOpen) HomeSidebar(onClose: _toggleSidebar),
-        // Incoming call overlay — rendered on top of everything.
-        Consumer(
-          builder: (_, ref, __) {
-            final incoming = ref.watch(incomingCallProvider);
-            if (!incoming.hasActiveCall) return const SizedBox.shrink();
-            return IncomingCallOverlay(
-              state: incoming,
-              onAccept: _acceptIncomingCall,
-              onDecline: _declineIncomingCall,
-            );
-          },
-        ),
       ],
     );
   }

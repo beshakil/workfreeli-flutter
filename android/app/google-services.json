@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "156959972688",
+    "project_id": "workfreeliapp",
+    "storage_bucket": "workfreeliapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:156959972688:android:d1727d5c517c2a88aea055",
+        "android_client_info": {
+          "package_name": "com.example.freeli_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIcPVbVyWNl9EiZxmvb96RRUuZah-kWf0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
