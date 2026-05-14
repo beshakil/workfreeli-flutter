@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/auth/auth_providers.dart';
 import 'dart:ui';
 import 'switch_account_modal.dart';
 
-class HomeSidebar extends StatefulWidget {
+class HomeSidebar extends ConsumerStatefulWidget {
   final VoidCallback onClose;
 
   const HomeSidebar({super.key, required this.onClose});
 
   @override
-  State<HomeSidebar> createState() => _HomeSidebarState();
+  ConsumerState<HomeSidebar> createState() => _HomeSidebarState();
 }
 
-class _HomeSidebarState extends State<HomeSidebar> {
+class _HomeSidebarState extends ConsumerState<HomeSidebar> {
   bool _isLightMode = true;
   bool _showSwitchAccountModal = false;
 
@@ -623,7 +625,7 @@ class _HomeSidebarState extends State<HomeSidebar> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () {},
+              onTap: () => ref.read(authNotifierProvider.notifier).logout(),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
                 padding:

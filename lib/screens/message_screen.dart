@@ -39,7 +39,9 @@ class MessageScreen extends ConsumerStatefulWidget {
 
 class _MessageScreenState extends ConsumerState<MessageScreen> {
   final _msgController = TextEditingController();
+  final _headerSearchController = TextEditingController();
   final _scrollController = ScrollController();
+  final _headerSearchFocus = FocusNode();
   final _focusNode = FocusNode();
 
   bool _hasText = false;
@@ -69,6 +71,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   void initState() {
     super.initState();
     _msgController.addListener(_onTextChanged);
+    // header search text will update provider via TextField onChanged
     _scrollController.addListener(_onScroll);
 
     // Cache notifiers during initState when ref is guaranteed valid.
@@ -97,11 +100,15 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
       // Compute initial date chip so it's ready when user scrolls.
       _updateDateChip();
     });
+
+    // Keep header search controller in sync with provider and focus when activated
+    // Listener moved to build() because ref.listen must be used within build.
   }
 
   @override
   void dispose() {
     _msgController.removeListener(_onTextChanged);
+    // no explicit listener to remove; TextField handles updates
     _xmppSub?.cancel();
     _dateChipHideTimer?.cancel();
     debugPrint(
@@ -112,9 +119,11 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     _activeRoomIdCtrl?.state = null;
 
     _msgController.dispose();
+    _headerSearchController.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
+    _headerSearchFocus.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -153,7 +162,10 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     if (!mounted || !_scrollController.hasClients) return;
 
     final state = ref.read(messagesProvider(_args));
-    if (state.messages.isEmpty) return;
+    final activeFilter = ref.read(activeFilterProvider(widget.room.id));
+    final searchQuery = ref.read(activeSearchQueryProvider(widget.room.id));
+    final visible = _applyFilterToList(state.messages, activeFilter, searchQuery);
+    if (visible.isEmpty) return;
 
     final scrollOffset = _scrollController.offset;
     final viewportHeight = _scrollController.position.viewportDimension;
@@ -168,20 +180,19 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
     int targetIndex;
     if (maxScroll <= 0) {
       // All messages fit — oldest is the last one.
-      targetIndex = state.messages.length - 1;
+      targetIndex = visible.length - 1;
     } else {
       final totalContentExtent = maxScroll + viewportHeight;
       // Look near the top of the viewport (oldest visible messages)
       final viewportOffset = viewportHeight * 0.8;
       final targetPosition = scrollOffset + viewportOffset;
-      final progress =
-          (targetPosition / totalContentExtent).clamp(0.0, 1.0);
-      targetIndex = (progress * (state.messages.length - 1)).round();
+      final progress = (targetPosition / totalContentExtent).clamp(0.0, 1.0);
+      targetIndex = (progress * (visible.length - 1)).round();
     }
 
-    targetIndex = targetIndex.clamp(0, state.messages.length - 1);
+    targetIndex = targetIndex.clamp(0, visible.length - 1);
 
-    final msg = state.messages[targetIndex];
+    final msg = visible[targetIndex];
     final dateLabel = _formatDateChip(msg.createdAt);
 
     if (dateLabel != _currentDateChip || !_showDateChip) {
@@ -190,6 +201,44 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
         _showDateChip = true;
       });
     }
+  }
+
+  List<ChatMessage> _applyFilterToList(List<ChatMessage> msgs, MessageFilter? f, [String? query]) {
+    List<ChatMessage> filtered = msgs;
+    if (f != null) {
+      final key = f.key;
+      bool matches(ChatMessage m) {
+        final body = m.msg.toLowerCase();
+        switch (key) {
+          case 'messages_with_links':
+            return RegExp(r'https?://').hasMatch(m.msg);
+          case 'messages_with_files':
+            return m.hasAttachments;
+          case 'messages_with_starred_files':
+            return m.attachments.any((a) => a.tags.any((t) => t.title.toLowerCase().contains('star')));
+          case 'private_messages':
+            return m.msgType.toLowerCase() == 'private';
+          case 'messages_with_titles':
+            return m.msg.contains('\n');
+          case 'threaded_messages':
+          case 'new_unread_messages':
+          case 'flagged_messages':
+          default:
+            return false;
+        }
+      }
+
+      filtered = msgs.where(matches).toList();
+    }
+
+    if (query != null && query.trim().isNotEmpty) {
+      final q = query.toLowerCase();
+      filtered = filtered.where((m) {
+        return m.msg.toLowerCase().contains(q) || m.senderName.toLowerCase().contains(q);
+      }).toList();
+    }
+
+    return filtered;
   }
 
   String _formatDateChip(String createdAt) {
@@ -425,6 +474,24 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(messagesProvider(_args));
+    final activeFilter = ref.watch(activeFilterProvider(widget.room.id));
+    final searchQuery = ref.watch(activeSearchQueryProvider(widget.room.id));
+
+    // Sync header search controller with provider and manage focus when activated
+    ref.listen<String?>(activeSearchQueryProvider(widget.room.id), (prev, next) {
+      if (!mounted) return;
+      if (next == null) {
+        _headerSearchController.clear();
+        _headerSearchFocus.unfocus();
+      } else {
+        if (_headerSearchController.text != next) {
+          _headerSearchController.text = next;
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _headerSearchFocus.requestFocus();
+        });
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -448,6 +515,8 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
               ),
             ],
           ),
+          // Floating filter chip (above date chip)
+          if (activeFilter != null) _buildFilterChip(activeFilter),
           // Floating date chip
           if (_showDateChip && _currentDateChip.isNotEmpty) _buildDateChip(),
           // Floating scroll button
@@ -469,7 +538,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
 
   Widget _buildDateChip() {
     return Positioned(
-      top: MediaQuery.of(context).padding.top + 60,
+      top: MediaQuery.of(context).padding.top + 100,
       left: 0,
       right: 0,
       child: Center(
@@ -497,6 +566,50 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textPrimary,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(MessageFilter filter) {
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 60,
+      left: 16,
+      right: 16,
+      child: Center(
+        child: AnimatedOpacity(
+          opacity: 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.bgCard,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(filter.icon, size: 16, color: AppTheme.textPrimary),
+                const SizedBox(width: 8),
+                Text(filter.label, style: AppTheme.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    ref.read(activeFilterProvider(widget.room.id).notifier).state = null;
+                  },
+                  child: const Icon(Icons.close_rounded, size: 16, color: AppTheme.textPrimary),
+                ),
+              ],
             ),
           ),
         ),
@@ -545,6 +658,7 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
   // ─── Header ────────────────────────────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context) {
+    final searchQuery = ref.watch(activeSearchQueryProvider(widget.room.id));
     return Container(
       padding: EdgeInsets.only(
         top: MediaQuery.of(context).padding.top + 6,
@@ -556,75 +670,135 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
         color: AppTheme.bgCard,
         border: Border(bottom: BorderSide(color: AppTheme.border)),
       ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: AppTheme.textMuted, size: 20),
-          ),
-          // Room avatar (image or initials) - matching chat_sidebar.dart
-          _buildHeaderAvatar(),
-          const SizedBox(width: 12),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => showUserProfileModal(context, room: widget.room),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.room.title,
-                    style: AppTheme.headingSmall,
-                    overflow: TextOverflow.ellipsis,
+      child: searchQuery != null
+          ? Row(
+              children: [
+                IconButton(
+                  onPressed: () {
+                    // Close search and clear query
+                    ref.read(activeSearchQueryProvider(widget.room.id).notifier).state = null;
+                    _headerSearchController.clear();
+                  },
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: AppTheme.textMuted, size: 20),
+                ),
+                _buildHeaderAvatar(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      controller: _headerSearchController,
+                      focusNode: _headerSearchFocus,
+                      style: AppTheme.bodyMedium,
+                      decoration: InputDecoration(
+                        hintText: 'Search messages…',
+                        hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textDim),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.textDim),
+                        suffixIcon: (searchQuery != null && searchQuery.isNotEmpty)
+                            ? GestureDetector(
+                                onTap: () {
+                                  _headerSearchController.clear();
+                                  ref.read(activeSearchQueryProvider(widget.room.id).notifier).state = '';
+                                },
+                                child: const Icon(Icons.close_rounded, color: AppTheme.textDim, size: 18),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        filled: true,
+                        fillColor: AppTheme.bgElevated,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppTheme.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppTheme.primary),
+                        ),
+                      ),
+                      onChanged: (v) => ref.read(activeSearchQueryProvider(widget.room.id).notifier).state = v,
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(
-                        widget.room.isGroup
-                            ? Icons.group_rounded
-                            : Icons.person_rounded,
-                        size: 12,
-                        color: AppTheme.textDim,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.room.isGroup ? 'Channel' : 'Direct message',
-                        style: AppTheme.caption,
-                      ),
-                      if (widget.room.isMuted) ...[
-                        const SizedBox(width: 8),
-                        Icon(Icons.volume_off_rounded,
-                            size: 12, color: AppTheme.textDim),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    setState(() => _showChatSidebar = true);
+                  },
+                  child: _iconBtn(Icons.more_vert_rounded),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: AppTheme.textMuted, size: 20),
+                ),
+                // Room avatar (image or initials) - matching chat_sidebar.dart
+                _buildHeaderAvatar(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => showUserProfileModal(context, room: widget.room),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.room.title,
+                          style: AppTheme.headingSmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              widget.room.isGroup
+                                  ? Icons.group_rounded
+                                  : Icons.person_rounded,
+                              size: 12,
+                              color: AppTheme.textDim,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              widget.room.isGroup ? 'Channel' : 'Direct message',
+                              style: AppTheme.caption,
+                            ),
+                            if (widget.room.isMuted) ...[
+                              const SizedBox(width: 8),
+                              Icon(Icons.volume_off_rounded,
+                                  size: 12, color: AppTheme.textDim),
+                            ],
+                            // Show XMPP connection indicator
+                            _XmppStatusDot(),
+                          ],
+                        ),
                       ],
-                      // Show XMPP connection indicator
-                      _XmppStatusDot(),
-                    ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+                GestureDetector(
+                  onTap: () => _startCall(isVideo: false),
+                  child: _iconBtn(Icons.phone_rounded),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _startCall(isVideo: true),
+                  child: _iconBtn(Icons.videocam_rounded),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showChatSidebar = true;
+                    });
+                  },
+                  child: _iconBtn(Icons.more_vert_rounded),
+                ),
+              ],
             ),
-          ),
-          GestureDetector(
-            onTap: () => _startCall(isVideo: false),
-            child: _iconBtn(Icons.phone_rounded),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => _startCall(isVideo: true),
-            child: _iconBtn(Icons.videocam_rounded),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _showChatSidebar = true;
-              });
-            },
-            child: _iconBtn(Icons.more_vert_rounded),
-          ),
-        ],
-      ),
     );
   }
 
@@ -895,6 +1069,10 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
       );
     }
 
+    final activeFilter = ref.watch(activeFilterProvider(widget.room.id));
+    final searchQuery = ref.watch(activeSearchQueryProvider(widget.room.id));
+    final visibleMessages = _applyFilterToList(state.messages, activeFilter, searchQuery);
+
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         // Update date chip on any scroll movement
@@ -918,9 +1096,9 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
         controller: _scrollController,
         reverse: true,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        itemCount: state.messages.length + (state.hasMore ? 1 : 0),
+        itemCount: visibleMessages.length + (state.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index == state.messages.length) {
+          if (index == visibleMessages.length) {
             return Padding(
               padding: const EdgeInsets.all(16),
               child: Center(
@@ -936,9 +1114,9 @@ class _MessageScreenState extends ConsumerState<MessageScreen> {
             );
           }
 
-          final msg = state.messages[index];
-          final next = index + 1 < state.messages.length
-              ? state.messages[index + 1]
+          final msg = visibleMessages[index];
+          final next = index + 1 < visibleMessages.length
+              ? visibleMessages[index + 1]
               : null;
           final showHeader = next == null || next.senderId != msg.senderId;
 

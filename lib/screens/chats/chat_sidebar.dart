@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/conversation_models.dart';
+import '../../features/conversations/conversations_providers.dart';
 
-class ChatSidebar extends StatefulWidget {
+class ChatSidebar extends ConsumerStatefulWidget {
   final VoidCallback onClose;
   final Room room;
 
@@ -15,10 +17,10 @@ class ChatSidebar extends StatefulWidget {
   });
 
   @override
-  State<ChatSidebar> createState() => _ChatSidebarState();
+  ConsumerState<ChatSidebar> createState() => _ChatSidebarState();
 }
 
-class _ChatSidebarState extends State<ChatSidebar> {
+class _ChatSidebarState extends ConsumerState<ChatSidebar> {
   bool _showFilters = false;
 
   @override
@@ -239,6 +241,12 @@ class _ChatSidebarState extends State<ChatSidebar> {
         _buildMenuItem(
           icon: Icons.search_rounded,
           label: 'Search messages',
+          onTap: () {
+            // Activate search UI for this room (empty query = active)
+            ref.read(activeSearchQueryProvider(widget.room.id).notifier).state = '';
+            // Close sidebar after selecting search
+            widget.onClose();
+          },
         ),
         const SizedBox(height: 2),
         _buildMenuItem(
@@ -290,6 +298,29 @@ class _ChatSidebarState extends State<ChatSidebar> {
       ),
       child: Column(
         children: [
+          // Clear filters action
+          // Material(
+          //   color: Colors.transparent,
+          //   child: InkWell(
+          //     onTap: () {
+          //       ref.read(activeFilterProvider(widget.room.id).notifier).state = null;
+          //     },
+          //     borderRadius: BorderRadius.circular(6),
+          //     child: Padding(
+          //       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          //       child: Row(
+          //         children: const [
+          //           Icon(Icons.clear_all_rounded, color: Color(0xFF94A3B8), size: 16),
+          //           SizedBox(width: 10),
+          //           Expanded(
+          //             child: Text('Clear all filters', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 13, fontWeight: FontWeight.w500)),
+          //           ),
+          //         ],
+          //       ),
+          //     ),
+          //   ),
+          // ),
+          const SizedBox(height: 6),
           _buildFilterItem(
             icon: Icons.chat_rounded,
             label: 'Threaded messages',
@@ -392,7 +423,9 @@ class _ChatSidebarState extends State<ChatSidebar> {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          // TODO: Implement filter logic
+          final key = label.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+          final filter = MessageFilter(key: key, label: label, icon: icon);
+          ref.read(activeFilterProvider(widget.room.id).notifier).state = filter;
         },
         borderRadius: BorderRadius.circular(6),
         child: Padding(

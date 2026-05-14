@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/conversation_models.dart';
@@ -428,3 +429,19 @@ final messagesProvider = StateNotifierProvider.autoDispose
     );
   },
 );
+
+// ── Message filter state ───────────────────────────────────────────────────
+
+class MessageFilter {
+  final String key;
+  final String label;
+  final IconData icon;
+
+  const MessageFilter({required this.key, required this.label, required this.icon});
+}
+
+/// Per-room active message filter. Set to `null` when no filter is applied.
+final activeFilterProvider = StateProvider.family<MessageFilter?, String>((ref, roomId) => null);
+
+/// Per-room active message search query. `null` means search UI is inactive.
+final activeSearchQueryProvider = StateProvider.family<String?, String>((ref, roomId) => null);

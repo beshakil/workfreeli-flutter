@@ -234,7 +234,7 @@ class _CallsScreenState extends ConsumerState<CallsScreen> {
   Widget _buildSearchBar() {
     return Container(
       color: AppTheme.bgCard,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Container(
         height: 40,
         decoration: BoxDecoration(
