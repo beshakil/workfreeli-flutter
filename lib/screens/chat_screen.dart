@@ -18,8 +18,11 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _searchController = TextEditingController();
+  final _filterIconKey = GlobalKey();
   String _searchQuery = '';
   String _selectedFilter = 'all';
+  bool _isFilterDropdownOpen = false;
+  OverlayEntry? _filterDropdownOverlay;
 
   @override
   void initState() {
@@ -28,8 +31,117 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    _hideFilterDropdown();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _toggleFilterDropdown() {
+    if (_isFilterDropdownOpen) {
+      _hideFilterDropdown();
+    } else {
+      _showFilterDropdown();
+    }
+  }
+
+  void _showFilterDropdown() {
+    setState(() {
+      _isFilterDropdownOpen = true;
+    });
+
+    // Get the position of the filter icon
+    final RenderBox? renderBox =
+        _filterIconKey.currentContext?.findRenderObject() as RenderBox?;
+    final Offset offset = renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+    final Size size = renderBox?.size ?? Size.zero;
+
+    _filterDropdownOverlay = OverlayEntry(
+      builder: (context) => GestureDetector(
+        onTap: () => _hideFilterDropdown(),
+        child: Container(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned(
+                top: offset.dy +
+                    size.height +
+                    8, // Position below the icon with 8px gap
+                right: 16, // Align to the right side
+                child: _buildFilterDropdownMenu(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_filterDropdownOverlay!);
+  }
+
+  void _hideFilterDropdown() {
+    _filterDropdownOverlay?.remove();
+    _filterDropdownOverlay = null;
+    setState(() {
+      _isFilterDropdownOpen = false;
+    });
+  }
+
+  Widget _buildFilterDropdownMenu() {
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 200,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _dropdownFilters.map((f) => _buildDropdownItem(f)).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdownItem(_DropdownFilterConfig config) {
+    final isSelected = _selectedFilter == config.key;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedFilter = config.key;
+          });
+          _hideFilterDropdown();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(config.icon,
+                  size: 18,
+                  color: isSelected ? AppTheme.primary : AppTheme.textDim),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  config.label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? AppTheme.primary : AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              if (isSelected)
+                Icon(Icons.check_rounded, size: 18, color: AppTheme.primary),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -202,18 +314,45 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildFilterBar() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 0, 6, 12),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         border: Border(
           bottom: BorderSide(color: AppTheme.border, width: 1),
         ),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _filters.map((f) => _buildFilterChip(f)).toList(),
-        ),
+      child: Row(
+        children: [
+          // Filter chips (left side)
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _filters.map((f) => _buildFilterChip(f)).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Filter icon on the right side
+          Material(
+            key: _filterIconKey,
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _toggleFilterDropdown,
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  Icons.filter_alt_rounded,
+                  color: _isFilterDropdownOpen
+                      ? AppTheme.primary
+                      : AppTheme.textDim,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -272,19 +411,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       case 'unread':
         filtered =
             filtered.where((r) => (unreadCounts[r.id] ?? 0) > 0).toList();
+      case 'favorite':
+        // TODO: Implement favorite filter
+        filtered = filtered;
       case 'group':
         filtered = filtered.where((r) => r.isGroup).toList();
       case 'archive':
         filtered = filtered.where((r) => r.isArchived).toList();
+      case 'threaded':
+        // TODO: Implement threaded filter
+        filtered = filtered;
       case 'locked':
         filtered = filtered.where((r) => r.isClosedFor).toList();
+      case 'created_by_me':
+        // TODO: Implement filter for rooms created by current user
+        filtered = filtered;
+      case 'created_by_others':
+        // TODO: Implement filter for rooms created by others
+        filtered = filtered;
+      case 'rooms':
+        filtered = filtered.where((r) => r.isGroup).toList();
+      case 'direct_messages':
+        filtered = filtered.where((r) => !r.isGroup).toList();
     }
 
     return filtered;
   }
 }
 
-// ── Filter configs ────────────────────────────────────────────────────────────
+// ── Filter configs for horizontal chips ────────────────────────────────────────
 
 class _FilterConfig {
   final String key;
@@ -301,6 +456,25 @@ const _filters = [
   _FilterConfig('archive', 'Archive', Icons.archive_rounded),
   _FilterConfig('threaded', 'Threaded', Icons.forum_rounded),
   _FilterConfig('locked', 'Locked', Icons.lock_rounded),
+];
+
+// ── Filter configs for dropdown menu ─────────────────────────────────────────
+
+class _DropdownFilterConfig {
+  final String key;
+  final String label;
+  final IconData icon;
+  const _DropdownFilterConfig(this.key, this.label, this.icon);
+}
+
+const _dropdownFilters = [
+  _DropdownFilterConfig('all', 'All', Icons.list_rounded),
+  _DropdownFilterConfig('created_by_me', 'Created by me', Icons.person_rounded),
+  _DropdownFilterConfig(
+      'created_by_others', 'Created by others', Icons.group_rounded),
+  _DropdownFilterConfig('rooms', 'Rooms', Icons.chat_rounded),
+  _DropdownFilterConfig(
+      'direct_messages', 'Direct messages', Icons.mail_rounded),
 ];
 
 // ─── Room Tile ────────────────────────────────────────────────────────────────

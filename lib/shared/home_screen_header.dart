@@ -8,11 +8,11 @@ class HomeScreenHeader extends StatefulWidget {
   /// Height of the header bar.
   static const double headerHeight = 60.0;
 
-  /// Called when the filter icon is tapped.
-  final VoidCallback? onFilterTap;
-
   /// Called when the menu icon is tapped.
   final VoidCallback? onMenuTap;
+
+  /// Called when the notification icon is tapped.
+  final VoidCallback? onNotificationTap;
 
   /// Currently selected filter
   final String selectedFilter;
@@ -22,8 +22,8 @@ class HomeScreenHeader extends StatefulWidget {
 
   const HomeScreenHeader({
     super.key,
-    this.onFilterTap,
     this.onMenuTap,
+    this.onNotificationTap,
     this.selectedFilter = 'All',
     this.showFilterDropdown = false,
   });
@@ -49,8 +49,8 @@ class _HomeScreenHeaderState extends State<HomeScreenHeader> {
             const Spacer(),
             // ── Action icons ──────────────────────────────────────────
             _buildIconButton(
-              icon: Icons.filter_alt_rounded,
-              onTap: widget.onFilterTap,
+              icon: Icons.notifications_rounded,
+              onTap: widget.onNotificationTap,
             ),
             const SizedBox(width: 4),
             _buildIconButton(

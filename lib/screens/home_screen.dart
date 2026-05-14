@@ -102,6 +102,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
+  void _onNotificationTap() {
+    // TODO: Implement notification action
+    debugPrint('[HomeScreen] Notification icon tapped');
+  }
+
   void _showFilterDropdown() {
     setState(() {
       _isFilterDropdownOpen = true;
@@ -483,8 +488,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           body: Column(
             children: [
               HomeScreenHeader(
-                onFilterTap: _toggleFilterDropdown,
                 onMenuTap: _toggleSidebar,
+                onNotificationTap: _onNotificationTap,
                 selectedFilter: _selectedFilter,
                 showFilterDropdown: _isFilterDropdownOpen,
               ),
